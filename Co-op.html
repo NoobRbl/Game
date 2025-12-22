@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Game Đối Kháng Online - Full Skills</title>
+    <title>Game Đối Kháng Online - Mượt Hơn & Fix Bay Trời</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #111; color: white; font-family: Arial, sans-serif; touch-action: none; }
@@ -83,7 +82,7 @@
                 this.damageCooldown = 0;
                 this.dashCooldown = 0;
                 this.cooldowns = { skill1: 0, skill2: 0, ultimate: 0, special: 0 };
-                this.attackDamage = 8;
+                this.attackDamage = 10;
                 this.attackWidth = 90;
                 this.attackHeight = 60;
                 this.attackOffsetY = 40;
@@ -97,17 +96,19 @@
                 this.position.x += this.velocity.x;
                 this.position.y += this.velocity.y;
 
-                if (this.position.y + this.height + this.velocity.y >= groundY) {
+                // Gravity + ground collision
+                if (this.position.y + this.height >= groundY) {
                     this.velocity.y = 0;
                     this.position.y = groundY - this.height;
                 } else {
                     this.velocity.y += gravity;
                 }
 
+                // Bounds
                 if (this.position.x < 20) this.position.x = 20;
                 if (this.position.x + this.width > canvas.width - 20) this.position.x = canvas.width - this.width - 20;
 
-                // cooldowns
+                // Cooldowns
                 Object.keys(this.cooldowns).forEach(k => this.cooldowns[k] = Math.max(0, this.cooldowns[k] - 1));
                 this.dashCooldown = Math.max(0, this.dashCooldown - 1);
                 this.damageCooldown = Math.max(0, this.damageCooldown - 1);
@@ -156,7 +157,7 @@
                 this.attackWidth = 220;
                 this.attackHeight = 100;
                 this.attackOffsetY = 20;
-                this.cooldowns.ultimate = 900; // ~15s cooldown
+                this.cooldowns.ultimate = 900;
                 setTimeout(() => this.isAttacking = false, 800);
             }
 
@@ -177,33 +178,27 @@
             }
 
             draw() {
-                // tên trên đầu
                 ctx.fillStyle = 'white';
                 ctx.font = 'bold 22px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText(this.name, this.position.x + this.width / 2, this.position.y - 10);
 
-                // thân nhân vật (flip theo hướng)
                 const flip = this.facing === 'left';
                 ctx.save();
                 ctx.translate(this.position.x + this.width / 2, this.position.y + this.height / 2);
                 if (flip) ctx.scale(-1, 1);
                 ctx.translate(-this.width / 2, -this.height / 2);
 
-                // hiệu ứng dash
                 if (this.isDashing) ctx.globalAlpha = 0.7;
 
-                // thân
                 ctx.fillStyle = this.color;
                 ctx.fillRect(8, 35, this.width - 16, this.height - 55);
 
-                // đầu
                 ctx.fillStyle = this.color === 'blue' ? '#add8e6' : '#ffb6c1';
                 ctx.beginPath();
                 ctx.arc(this.width / 2, 15, 20, 0, Math.PI * 2);
                 ctx.fill();
 
-                // tay vung khi đánh
                 const armSwing = this.isAttacking ? Math.sin(Date.now() / 100) * 30 : 0;
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 8;
@@ -219,14 +214,13 @@
                 ctx.restore();
                 ctx.globalAlpha = 1;
 
-                // hộp tấn công
                 if (this.isAttacking) {
                     const ax = flip ? this.position.x - this.attackWidth : this.position.x + this.width;
-                    ctx.fillStyle = this.attackDamage > 40 ? 'rgba(255,215,0,0.5)' : this.attackDamage > 20 ? 'rgba(255,165,0,0.5)' : 'rgba(255,100,100,0.4)';
+                    const color = this.attackDamage > 40 ? 'rgba(255,215,0,0.5)' : this.attackDamage > 20 ? 'rgba(255,165,0,0.5)' : 'rgba(255,100,100,0.4)';
+                    ctx.fillStyle = color;
                     ctx.fillRect(ax, this.position.y + this.attackOffsetY, this.attackWidth, this.attackHeight);
                 }
 
-                // hiệu ứng block
                 if (this.isBlocking) {
                     ctx.strokeStyle = '#3498db';
                     ctx.lineWidth = 4;
@@ -247,11 +241,16 @@
             canvas.width = Math.min(900, window.innerWidth - 40);
             canvas.height = canvas.width * 0.55;
             groundY = canvas.height - 70;
+            if (myFighter && opponentFighter) {
+                // Reposition nếu resize giữa game
+                myFighter.position.y = groundY - myFighter.height;
+                opponentFighter.position.y = groundY - opponentFighter.height;
+            }
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Joystick (giữ nguyên)
+        // Joystick (giữ nguyên, đã mượt)
         let joystickActive = false;
         const base = document.getElementById('base');
         const knob = document.getElementById('knob');
@@ -274,27 +273,20 @@
         ['touchmove', 'mousemove'].forEach(ev => document.addEventListener(ev, e => { if (joystickActive) { e.preventDefault(); updateJoystick(e); } }));
         ['touchend', 'mouseup', 'touchcancel'].forEach(ev => document.addEventListener(ev, () => { joystickActive = false; knob.style.transform = 'translate(0,0)'; keys.a.pressed = keys.d.pressed = false; }));
 
-        // Nút hành động (mobile + PC)
-        const action = (fn) => { return (e) => { e?.preventDefault(); if (myFighter) fn(); } };
-
+        // Action buttons
+        const action = (fn) => (e) => { e?.preventDefault(); if (myFighter) fn(); };
         document.getElementById('jumpBtn').addEventListener('touchstart', action(() => myFighter.jump()));
         document.getElementById('jumpBtn').addEventListener('mousedown', action(() => myFighter.jump()));
-
         document.getElementById('dashBtn').addEventListener('touchstart', action(() => myFighter.dash()));
         document.getElementById('dashBtn').addEventListener('mousedown', action(() => myFighter.dash()));
-
         document.getElementById('specialBtn').addEventListener('touchstart', action(() => myFighter.special()));
         document.getElementById('specialBtn').addEventListener('mousedown', action(() => myFighter.special()));
-
         document.getElementById('attackBtn').addEventListener('touchstart', action(() => myFighter.basicAttack()));
         document.getElementById('attackBtn').addEventListener('mousedown', action(() => myFighter.basicAttack()));
-
         document.getElementById('skill1Btn').addEventListener('touchstart', action(() => myFighter.skill1()));
         document.getElementById('skill1Btn').addEventListener('mousedown', action(() => myFighter.skill1()));
-
         document.getElementById('skill2Btn').addEventListener('touchstart', action(() => myFighter.skill2()));
         document.getElementById('skill2Btn').addEventListener('mousedown', action(() => myFighter.skill2()));
-
         document.getElementById('ultimateBtn').addEventListener('touchstart', action(() => myFighter.ultimate()));
         document.getElementById('ultimateBtn').addEventListener('mousedown', action(() => myFighter.ultimate()));
 
@@ -349,7 +341,6 @@
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // đất
             ctx.fillStyle = '#8B4513';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 
@@ -357,12 +348,10 @@
             opponentFighter.update();
             drawHealth();
 
-            // di chuyển
             myFighter.velocity.x = 0;
             if (keys.a.pressed) { myFighter.velocity.x = -7; myFighter.facing = 'left'; }
             else if (keys.d.pressed) { myFighter.velocity.x = 7; myFighter.facing = 'right'; }
 
-            // va chạm tấn công
             if (myFighter.isAttacking && detectCollision(myFighter, opponentFighter) && opponentFighter.damageCooldown <= 0) {
                 let dmg = myFighter.attackDamage;
                 if (opponentFighter.isBlocking) dmg = Math.floor(dmg / 2);
@@ -383,7 +372,6 @@
                 }
             }
 
-            // kết thúc
             if (myHealth <= 0 || opponentHealth <= 0) {
                 ctx.fillStyle = 'rgba(0,0,0,0.9)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -400,23 +388,36 @@
         function setupConnection() {
             conn.on('data', data => {
                 if (data.type === 'state') {
-                    opponentFighter.position = data.position;
+                    // Lerp position cho mượt (giảm giật lag)
+                    const lerp = 0.3;
+                    opponentFighter.position.x += (data.position.x - opponentFighter.position.x) * lerp;
+                    opponentFighter.position.y += (data.position.y - opponentFighter.position.y) * lerp;
+
+                    // Snap velocity, facing, attacking để chính xác
                     opponentFighter.velocity = data.velocity;
                     opponentFighter.facing = data.facing;
                     opponentFighter.isAttacking = data.isAttacking;
                     opponentFighter.isDashing = data.isDashing;
                     opponentFighter.isBlocking = data.isBlocking;
-                    opponentFighter.attackDamage = data.attackDamage;
-                    opponentFighter.attackWidth = data.attackWidth;
-                    opponentFighter.attackHeight = data.attackHeight;
-                    opponentFighter.attackOffsetY = data.attackOffsetY;
+                    opponentFighter.attackDamage = data.attackDamage || 10;
+                    opponentFighter.attackWidth = data.attackWidth || 90;
+                    opponentFighter.attackHeight = data.attackHeight || 60;
+                    opponentFighter.attackOffsetY = data.attackOffsetY || 40;
+
                     opponentHealth = data.health;
+
+                    // Force ground nếu có lỗi sync
+                    if (opponentFighter.position.y + opponentFighter.height > groundY) {
+                        opponentFighter.position.y = groundY - opponentFighter.height;
+                        opponentFighter.velocity.y = 0;
+                    }
                 } else if (data.type === 'damage') {
                     myHealth -= data.amount;
                     if (myHealth < 0) myHealth = 0;
                 }
             });
 
+            // Sync nhanh hơn (30ms ~33fps) để mượt
             setInterval(() => {
                 if (conn?.open && myFighter) {
                     conn.send({
@@ -434,7 +435,7 @@
                         health: myHealth
                     });
                 }
-            }, 40);
+            }, 30);
         }
 
         function startGame() {
@@ -445,11 +446,23 @@
             const leftX = 100;
             const rightX = canvas.width - 160;
 
-            myFighter = new Fighter({ position: { x: isHost ? leftX : rightX, y: 0 }, color: isHost ? 'blue' : 'red', facing: isHost ? 'right' : 'left' });
-            myFighter.name = isHost ? 'P1' : 'P2';
+            myFighter = new Fighter({ 
+                position: { x: isHost ? leftX : rightX, y: groundY - 140 }, 
+                color: isHost ? 'blue' : 'red', 
+                facing: isHost ? 'right' : 'left' 
+            });
+            myFighter.name = 'P1';
+            myFighter.position.y = groundY - myFighter.height; // Force đúng đất
+            myFighter.velocity.y = 0;
 
-            opponentFighter = new Fighter({ position: { x: isHost ? rightX : leftX, y: 0 }, color: isHost ? 'red' : 'blue', facing: isHost ? 'left' : 'right' });
-            opponentFighter.name = isHost ? 'P2' : 'P1';
+            opponentFighter = new Fighter({ 
+                position: { x: isHost ? rightX : leftX, y: groundY - 140 }, 
+                color: isHost ? 'red' : 'blue', 
+                facing: isHost ? 'left' : 'right' 
+            });
+            opponentFighter.name = 'P2';
+            opponentFighter.position.y = groundY - opponentFighter.height; // Force đúng đất
+            opponentFighter.velocity.y = 0;
 
             setupConnection();
             animate();
