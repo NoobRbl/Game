@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Game Đối Kháng Online 2 Người</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: Arial; text-align: center; }
+        #menu { padding: 20px; }
+        #menu input { padding: 10px; width: 200px; margin: 10px; }
+        #menu button { padding: 10px 20px; font-size: 18px; margin: 10px; }
+        canvas { background: #aaf; display: block; margin: 0 auto; }
+        #touchControls { 
+            position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); 
+            display: flex; justify-content: space-around; padding: 10px; display: none; 
+        }
+        #touchControls button { 
+            width: 80px; height: 80px; font-size: 30px; background: #333; color: white; 
+            border: 2px solid #fff; border-radius: 50%; 
+        }
+        #info { margin: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>Game Đối Kháng Online</h1>
+        <button id="createBtn">Create Game (Host)</button>
+        <div id="hostIdDisplay"></div>
+        <br>
+        <input id="joinIdInput" placeholder="Nhập Game ID của bạn bè">
+        <button id="joinBtn">Join Game</button>
+        <div id="info">Host copy ID gửi bạn bè. Chơi trên điện thoại dùng nút dưới màn.</div>
+    </div>
+
+    <canvas id="canvas" width="800" height="400"></canvas>
+
+    <div id="touchControls">
+        <button id="leftBtn">◄</button>
+        <button id="jumpBtn">↑</button>
+        <button id="rightBtn">►</button>
+        <button id="attackBtn">⚔</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 100;
+        const gravity = 0.7;
+        const groundY = canvas.height - 50;
+
+        class Fighter {
+            constructor({position, color, facing = 'right'}) {
+                this.position = position;
+                this.velocity = { x: 0, y: 0 };
+                this.width = 50;
+                this.height = 150;
+                this.color = color;
+                this.facing = facing;
+                this.isAttacking = false;
+                this.attackBox = { width: 100, height: 80 };
+                this.health = 100;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
+
+                if (this.isAttacking) {
+                    ctx.fillStyle = 'rgba(255,255,0,0.5)';
+                    const ax = this.facing === 'right' ? this.position.x + this.width : this.position.x - this.attackBox.width;
+                    ctx.fillRect(ax, this.position.y + 40, this.attackBox.width, this.attackBox.height);
+                }
+            }
+
+            attack() {
+                this.isAttacking = true;
+                setTimeout(() => { this.isAttacking = false; }, 200);
+            }
+
+            update() {
+                this.draw();
+
+                if (this.velocity.x > 0) this.facing = 'right';
+                if (this.velocity.x < 0) this.facing = 'left';
+
+                this.position.x += this.velocity.x;
+                this.position.y += this.velocity.y;
+
+                if (this.position.y + this.height + this.velocity.y >= groundY) {
+                    this.velocity.y = 0;
+                    this.position.y = groundY - this.height;
+                } else {
+                    this.velocity.y += gravity;
+                }
+
+                if (this.position.x < 0) this.position.x = 0;
+                if (this.position.x + this.width > canvas.width) this.position.x = canvas.width - this.width;
+            }
+        }
+
+        let myFighter, opponentFighter;
+        let myHealth = 100, opponentHealth = 100;
+        let isHost = false;
+        let conn = null;
+        let peer = null;
+
+        const keys = {
+            a: { pressed: false },
+            d: { pressed: false }
+        };
+
+        const menu = document.getElementById('menu');
+        const hostIdDisplay = document.getElementById('hostIdDisplay');
+        const touchControls = document.getElementById('touchControls');
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isMobile) touchControls.style.display = 'flex';
+
+        // Touch controls
+        document.getElementById('leftBtn').addEventListener('touchstart', (e) => { e.preventDefault(); keys.a.pressed = true; });
+        document.getElementById('leftBtn').addEventListener('touchend', (e) => { e.preventDefault(); keys.a.pressed = false; });
+        document.getElementById('rightBtn').addEventListener('touchstart', (e) => { e.preventDefault(); keys.d.pressed = true; });
+        document.getElementById('rightBtn').addEventListener('touchend', (e) => { e.preventDefault(); keys.d.pressed = false; });
+        document.getElementById('jumpBtn').addEventListener('touchstart', (e) => { e.preventDefault(); if (myFighter && myFighter.velocity.y === 0) myFighter.velocity.y = -15; });
+        document.getElementById('attackBtn').addEventListener('touchstart', (e) => { e.preventDefault(); if (myFighter) myFighter.attack(); });
+
+        // Keyboard controls
+        window.addEventListener('keydown', (e) => {
+            if (!myFighter) return;
+            switch (e.key.toLowerCase()) {
+                case 'a': keys.a.pressed = true; break;
+                case 'd': keys.d.pressed = true; break;
+                case 'w': if (myFighter.velocity.y === 0) myFighter.velocity.y = -15; break;
+                case ' ': myFighter.attack(); break;
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'a': keys.a.pressed = false; break;
+                case 'd': keys.d.pressed = false; break;
+            }
+        });
+
+        function rectangularCollision(attacker, defender) {
+            const ax = attacker.facing === 'right' ? attacker.position.x + attacker.width : attacker.position.x - attacker.attackBox.width;
+            return (
+                ax + attacker.attackBox.width > defender.position.x &&
+                ax < defender.position.x + defender.width &&
+                attacker.position.y + 40 + attacker.attackBox.height > defender.position.y &&
+                attacker.position.y + 40 < defender.position.y + defender.height
+            );
+        }
+
+        function drawHealth() {
+            // Left bar (bên trái màn hình)
+            const leftHealth = isHost ? myHealth : opponentHealth;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(20, 20, 300, 30);
+            ctx.fillStyle = 'lime';
+            ctx.fillRect(20, 20, 3 * leftHealth, 30);
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText('Bên Trái', 20, 75);
+
+            // Right bar
+            const rightHealth = isHost ? opponentHealth : myHealth;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(canvas.width - 320, 20, 300, 30);
+            ctx.fillStyle = 'lime';
+            ctx.fillRect(canvas.width - 320, 20, 3 * rightHealth, 30);
+            ctx.fillStyle = 'white';
+            ctx.fillText('Bên Phải', canvas.width - 320, 75);
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Nền đất
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+            if (myFighter) myFighter.update();
+            if (opponentFighter) opponentFighter.update();
+            drawHealth();
+
+            // Điều khiển di chuyển
+            myFighter.velocity.x = 0;
+            if (keys.a.pressed) myFighter.velocity.x = -5;
+            if (keys.d.pressed) myFighter.velocity.x = 5;
+
+            // Va chạm tấn công
+            if (myFighter && opponentFighter && rectangularCollision(myFighter, opponentFighter) && myFighter.isAttacking) {
+                opponentHealth -= 10;
+                if (conn && conn.open) conn.send({ type: 'damage', amount: 10 });
+            }
+
+            // Kết thúc game
+            if (myHealth <= 0 || opponentHealth <= 0) {
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '60px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(myHealth <= 0 ? 'Bạn Thua!' : 'Bạn Thắng!', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function setupConnection() {
+            conn.on('data', (data) => {
+                if (data.type === 'state') {
+                    opponentFighter.position = data.position;
+                    opponentFighter.velocity = data.velocity;
+                    opponentFighter.isAttacking = data.isAttacking;
+                    opponentFighter.facing = data.facing;
+                    opponentHealth = data.health;
+                } else if (data.type === 'damage') {
+                    myHealth -= data.amount;
+                    if (myHealth < 0) myHealth = 0;
+                }
+            });
+
+            // Gửi trạng thái định kỳ
+            setInterval(() => {
+                if (conn && conn.open && myFighter) {
+                    conn.send({
+                        type: 'state',
+                        position: { x: myFighter.position.x, y: myFighter.position.y },
+                        velocity: { x: myFighter.velocity.x, y: myFighter.velocity.y },
+                        isAttacking: myFighter.isAttacking,
+                        facing: myFighter.facing,
+                        health: myHealth
+                    });
+                }
+            }, 50);
+        }
+
+        function startGame() {
+            menu.style.display = 'none';
+            canvas.style.display = 'block';
+
+            const leftX = canvas.width * 0.2;
+            const rightX = canvas.width * 0.7;
+
+            if (isHost) {
+                myFighter = new Fighter({ position: { x: leftX, y: 0 }, color: 'blue', facing: 'right' });
+                opponentFighter = new Fighter({ position: { x: rightX, y: 0 }, color: 'red', facing: 'left' });
+            } else {
+                myFighter = new Fighter({ position: { x: rightX, y: 0 }, color: 'red', facing: 'left' });
+                opponentFighter = new Fighter({ position: { x: leftX, y: 0 }, color: 'blue', facing: 'right' });
+            }
+
+            animate();
+        }
+
+        // Create Game
+        document.getElementById('createBtn').onclick = () => {
+            peer = new Peer();
+            peer.on('open', (id) => {
+                hostIdDisplay.innerText = `Game ID của bạn: ${id}\nGửi ID này cho bạn bè!`;
+            });
+            peer.on('connection', (incomingConn) => {
+                conn = incomingConn;
+                isHost = true;
+                setupConnection();
+                startGame();
+            });
+        };
+
+        // Join Game
+        document.getElementById('joinBtn').onclick = () => {
+            const hostId = document.getElementById('joinIdInput').value.trim();
+            if (!hostId) return alert('Nhập ID!');
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect(hostId);
+                conn.on('open', () => {
+                    isHost = false;
+                    setupConnection();
+                    startGame();
+                });
+            });
+        };
+    </script>
+</body>
+</html>
