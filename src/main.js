@@ -1,124 +1,185 @@
 import { setupInput } from "./input.js";
 import { setupNet } from "./net.js";
-import { createGame } from "./game.js";
 import { setupRender } from "./render.js";
 
 const hud = document.getElementById("hud");
-const info= document.getElementById("info");
+const info = document.getElementById("info");
+const Lhp = document.getElementById("Lhp");
+const Rhp = document.getElementById("Rhp");
+const Len = document.getElementById("Len");
+const Ren = document.getElementById("Ren");
 
-const Lhp=document.getElementById("Lhp");
-const Rhp=document.getElementById("Rhp");
-const Len=document.getElementById("Len");
-const Ren=document.getElementById("Ren");
-
-function updateHUD(G, ping){
-  if(!G.Left || !G.Right) return;
-  Lhp.style.transform=`scaleX(${G.Left.hp/G.Left.hpMax})`;
-  Rhp.style.transform=`scaleX(${G.Right.hp/G.Right.hpMax})`;
-  Len.style.transform=`scaleX(${G.Left.en/G.Left.enMax})`;
-  Ren.style.transform=`scaleX(${G.Right.en/G.Right.enMax})`;
-  info.textContent = `FIGHT • ping: ${Math.round(ping)}ms • HP: ${G.Left.hp}/${G.Left.hpMax} vs ${G.Right.hp}/${G.Right.hpMax}`;
+function updateHUD(state, ping) {
+  if (!state?.L || !state?.R) return;
+  Lhp.style.transform = `scaleX(${state.L.hp / state.L.hpMax})`;
+  Rhp.style.transform = `scaleX(${state.R.hp / state.R.hpMax})`;
+  Len.style.transform = `scaleX(${state.L.en / state.L.enMax})`;
+  Ren.style.transform = `scaleX(${state.R.en / state.R.enMax})`;
+  info.textContent = `FIGHT • ping: ${Math.round(ping)}ms • HP: ${state.L.hp}/${state.L.hpMax} vs ${state.R.hp}/${state.R.hpMax}`;
 }
 
-(function boot(){
+(function boot() {
   const input = setupInput();
   const net = setupNet();
-  const { G, startMatch, step } = createGame();
   const render = setupRender();
 
-  // hooks for net
-  const hooks={
-    maybeStart(){
-      if(!net.NET.readyMe || !net.NET.readyPeer) return;
-      if(net.NET.started) return;
-
-      net.showGameUI();
-      net.NET.started = true;
-
-      if(net.role === "host"){
-        const seed = (Math.random()*0xFFFFFFFF)>>>0;
-        net.send({t:"start", seed});
-        startMatch(seed);
-      }
-    },
-    startMatch(seed){
-      net.NET.started = true;
-      net.NET.frame = 0;
-      net.NET.myQ.clear();
-      net.NET.peerQ.clear();
-      startMatch(seed);
-    }
+  // current authoritative state from server
+  const G = {
+    seed: 0,
+    camX: 0,
+    zoom: 1,
+    vignette: 0,
+    shake: 0,
+    shakeT: 0,
+    flash: 0,
+    flashT: 0,
+    timeScale: 1,
+    fx: { popups: [], slashes: [], sparks: [], afterImgs: [], smokes: [] },
+    Left: null,
+    Right: null
   };
-  net.setHooks(hooks);
 
-  // IMPORTANT: host created DC is returned via button click; we need to wire it.
-  document.getElementById("btnHost").addEventListener("click", async ()=>{
-    const res = await (async()=>{ /* already handled in net.js onclick */ return null; })();
+  // lightweight FX from server events (simple, no lag)
+  function spawnPopup(wx, wy, text, crit) {
+    G.fx.popups.push({ wx, wy: wy - 120, vy: -260, t: 0, life: 0.70, text, crit });
+  }
+  function spawnSlash(wx, wy, power) {
+    const count = power === "ult" ? 2 : 1; // giảm mạnh số lượng => bớt lag
+    for (let i = 0; i < count; i++) {
+      G.fx.slashes.push({
+        wx, wy: wy - 90,
+        dir: 1,
+        kind: power,
+        t: 0,
+        life: power === "ult" ? 0.18 : 0.14,
+        rot: (-0.6 + i * 0.25) + (Math.random() - 0.5) * 0.2,
+        len: power === "ult" ? 280 : 220,
+        w: power === "ult" ? 10 : 7
+      });
+    }
+  }
+  function spawnSparks(wx, wy, power) {
+    const count = power === "ult" ? 10 : 6; // giảm
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = (power === "ult" ? 820 : 620) * (0.5 + Math.random() * 0.6);
+      G.fx.sparks.push({
+        wx,
+        wy: wy - 96,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd - 220,
+        t: 0,
+        life: 0.36,
+        s: 2 + Math.random() * 2
+      });
+    }
+  }
+
+  net.setHandlers({
+    onStart({ seed }) {
+      G.seed = seed;
+      G.fx.popups.length = 0;
+      G.fx.slashes.length = 0;
+      G.fx.sparks.length = 0;
+    },
+    onState(msg) {
+      // server sends L/R already; just map into render structure
+      const s = msg.s;
+      G.Left = s.L;
+      G.Right = s.R;
+
+      // simple cam
+      G.camX = (G.Left.x + G.Right.x) * 0.5;
+
+      // light cinematic: only when ult state
+      const anyUlt = (G.Left.state === "ult" || G.Right.state === "ult");
+      G.zoom = anyUlt ? 1.07 : 1.00;
+      G.vignette = anyUlt ? 0.7 : 0.0;
+      G.timeScale = 1;
+
+      // apply events
+      for (const e of (msg.events || [])) {
+        if (e.t === "hit") {
+          spawnPopup(e.x, e.y, String(e.dmg), e.crit);
+          spawnSlash(e.x, e.y, e.power);
+          spawnSparks(e.x, e.y, e.power);
+
+          // tiny shake only
+          G.shakeT = Math.max(G.shakeT, 0.05);
+          G.shake = Math.max(G.shake, e.power === "ult" ? 14 : 10);
+          G.flashT = Math.max(G.flashT, 0.05);
+          G.flash = Math.max(G.flash, e.power === "ult" ? 0.18 : 0.10);
+        }
+      }
+
+      updateHUD(s, net.NET.ping);
+      hud.style.display = "flex";
+      info.style.display = "block";
+    }
   });
 
-  // intercept: net.js already sets onclick; but we still need to wire host dc
-  // easiest: poll until dc exists after host click
-  const hostBtn = document.getElementById("btnHost");
-  const oldHost = hostBtn.onclick;
-  hostBtn.onclick = async ()=>{
-    const created = await oldHost();
-    if(created?.dc) net.hostWire(created.dc);
-    return created;
-  };
-
-  // join wiring: net.js uses _onDataChannel internally, already wired by setHooks.
-
   let last = performance.now();
-  function loop(t){
+  let sendAcc = 0;
+
+  function loop(t) {
     requestAnimationFrame(loop);
-    const dtRaw = Math.min(0.033, Math.max(0.001, (t-last)/1000));
-    last=t;
+    const dt = Math.min(0.033, Math.max(0.001, (t - last) / 1000));
+    last = t;
 
-    // run sim if started + connected
-    if(net.NET.started && net.NET.connected && net.dc && net.dc.readyState==="open" && G.Left && G.Right){
-      const myIn = input.readLocalInput();
-      const sendF = net.NET.frame + net.NET.inputDelay;
-      net.NET.myQ.set(sendF, myIn);
-      net.send({t:"in", f:sendF, i:myIn});
+    // send inputs at 30hz (nhẹ hơn nhiều)
+    sendAcc += dt;
+    if (sendAcc >= 1 / 30) {
+      sendAcc = 0;
+      const my = input.readLocalInput();
 
-      if(t - net.NET._lastPing > 1000){
-        net.NET._lastPing = t;
-        net.send({t:"ping", ts:performance.now()});
-      }
-
-      const my = net.NET.myQ.get(net.NET.frame) || input.makeInput();
-      const peer = net.NET.peerQ.get(net.NET.frame) || input.makeInput();
-
-      const inLeft  = (net.role==="host") ? my   : peer;
-      const inRight = (net.role==="host") ? peer : my;
-
-      step(dtRaw * (G.timeScale||1), inLeft, inRight);
-
-      if(net.NET.frame>80){
-        net.NET.myQ.delete(net.NET.frame-80);
-        net.NET.peerQ.delete(net.NET.frame-80);
-      }
-      net.NET.frame++;
-
-      updateHUD(G, net.NET.ping);
-      hud.style.display="flex";
-      info.style.display="block";
-
-      // auto rematch when someone dies (host triggers)
-      if(G.Left.hp<=0 || G.Right.hp<=0){
-        net.NET.started=false;
-        setTimeout(()=>{
-          if(net.NET.connected && net.dc && net.dc.readyState==="open" && net.role==="host"){
-            const seed=(Math.random()*0xFFFFFFFF)>>>0;
-            net.send({t:"start", seed});
-            startMatch(seed);
-            net.NET.started=true;
-          }
-        }, 1000);
-      }
+      // IMPORTANT: actions should be “press” not “hold”
+      // We convert to one-shot using edge detector from input
+      const i = {
+        mx: my.mx,
+        atk: input.once("atk", my.atk),
+        jump: input.once("jump", my.jump),
+        dash: input.once("dash", my.dash),
+        s1: input.once("s1", my.s1),
+        s2: input.once("s2", my.s2),
+        ult: input.once("ult", my.ult),
+        sub: input.once("sub", my.sub)
+      };
+      net.sendInput(i);
+      net.ping();
     }
 
-    render.drawFrame(G, dtRaw);
+    // update local FX timers (client-only)
+    const fx = G.fx;
+
+    for (let i = fx.slashes.length - 1; i >= 0; i--) {
+      fx.slashes[i].t += dt;
+      if (fx.slashes[i].t >= fx.slashes[i].life) fx.slashes.splice(i, 1);
+    }
+    for (let i = fx.sparks.length - 1; i >= 0; i--) {
+      const p = fx.sparks[i];
+      p.t += dt;
+      p.wx += p.vx * dt;
+      p.wy += p.vy * dt;
+      p.vy += 920 * dt;
+      p.vx *= 0.985;
+      if (p.t >= p.life) fx.sparks.splice(i, 1);
+    }
+    for (let i = fx.popups.length - 1; i >= 0; i--) {
+      const d = fx.popups[i];
+      d.t += dt;
+      d.wy += d.vy * dt;
+      d.vy += 520 * dt;
+      if (d.t >= d.life) fx.popups.splice(i, 1);
+    }
+
+    // shake/flash decay
+    if (G.shakeT > 0) { G.shakeT = Math.max(0, G.shakeT - dt); G.shake *= 0.88; }
+    else G.shake *= 0.90;
+
+    if (G.flashT > 0) { G.flashT = Math.max(0, G.flashT - dt); G.flash *= 0.80; }
+    else G.flash *= 0.85;
+
+    render.drawFrame(G, dt);
   }
   requestAnimationFrame(loop);
 })();
