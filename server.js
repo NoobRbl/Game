@@ -1,509 +1,453 @@
+// server.js
+import express from "express";
 import http from "http";
-import fs from "fs";
+import { Server } from "socket.io";
 import path from "path";
-import { WebSocketServer } from "ws";
 import { fileURLToPath } from "url";
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" },
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = process.env.PORT || 10000;
 
-// ---------- static ----------
-function serveFile(res, filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  const map = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".json": "application/json; charset=utf-8"
-  };
-  const type = map[ext] || "application/octet-stream";
-  try {
-    const data = fs.readFileSync(filePath);
-    res.writeHead(200, { "Content-Type": type });
-    res.end(data);
-  } catch {
-    res.writeHead(404);
-    res.end("Not found");
+// ===== static =====
+app.use(express.static(path.join(__dirname, "public")));
+
+// health check
+app.get("/health", (_, res) => res.send("ok"));
+
+// ===== rooms =====
+// roomId -> { players: Map<socketId, player>, lastTickMs, seed }
+const rooms = new Map();
+
+function randInt(min, max) {
+  return (Math.random() * (max - min + 1) + min) | 0;
+}
+function clamp(v, a, b) {
+  return Math.max(a, Math.min(b, v));
+}
+function makeRoomId() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += chars[(Math.random() * chars.length) | 0];
+  return s;
+}
+
+function ensureRoom(roomId) {
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, {
+      players: new Map(),
+      lastTickMs: Date.now(),
+      seed: randInt(1, 1e9),
+    });
   }
+  return rooms.get(roomId);
 }
 
-const server = http.createServer((req, res) => {
-  let urlPath = req.url.split("?")[0];
-  if (urlPath === "/") urlPath = "/index.html";
-  const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, "");
-  const filePath = path.join(__dirname, safePath);
-  if (!filePath.startsWith(__dirname)) {
-    res.writeHead(403);
-    return res.end("Forbidden");
-  }
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return serveFile(res, filePath);
-  res.writeHead(404);
-  res.end("Not found");
-});
-
-// ---------- game sim ----------
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const lerp = (a, b, t) => a + (b - a) * t;
-const sgn = (v) => (v < 0 ? -1 : 1);
-
-function mulberry32(seed) {
-  let t = seed >>> 0;
-  return function () {
-    t += 0x6D2B79F5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function makeRng(seed) {
-  const r = mulberry32(seed);
-  return { f: () => r(), int: (a, b) => Math.floor(a + r() * (b - a + 1)) };
-}
-
-const SKILL_DMG_MIN = 1209;
-const SKILL_DMG_MAX = 2290;
-
-const TICK_HZ = 60;
-const STATE_HZ = 20;
-
-// fighter data
-function Fighter(side, rng) {
-  const hpMax = rng.int(20109, 36098);
+function makePlayer(side) {
+  const maxHp = randInt(20109, 36098);
   return {
-    side,
-    x: side < 0 ? -320 : 320,
+    side, // "L" or "R"
+    x: side === "L" ? -220 : 220,
     y: 0,
     vx: 0,
     vy: 0,
-    face: side < 0 ? 1 : -1,
+    face: side === "L" ? 1 : -1, // face to opponent
+    grounded: true,
 
-    hpMax,
-    hp: hpMax,
-    enMax: 100,
-    en: 100,
+    hp: maxHp,
+    maxHp,
 
-    state: "idle",
-    lock: 0,
-    stun: 0,
+    // resources
+    en: 0, // energy 0..100
+
+    // timers
     invul: 0,
+    stun: 0,
+    atkLock: 0,
+    dashCd: 0,
+    jumpCd: 0,
+    s1Cd: 0,
+    s2Cd: 0,
+    ultCd: 0,
+    subCd: 0,
 
-    cdDash: 0,
-    cdS1: 0,
-    cdS2: 0,
-    cdUlt: 0,
-    cdSub: 0,
-    cdAtk: 0,
+    // buffered inputs (server authoritative)
+    inp: { mx: 0, atk: false, dash: false, jump: false, s1: false, s2: false, ult: false, sub: false },
+    // edge triggers (server handles)
+    edge: { atk: false, dash: false, jump: false, s1: false, s2: false, ult: false, sub: false },
 
-    atkVar: 0,
-    skillVar: 0,
-    atkT: 0,
-    actT: 0,
-    didHit: false
+    // for hit variety
+    comboIdx: 0,
   };
 }
 
-function separate(a, b, dt) {
-  const minDist = 190;
-  const dx = b.x - a.x;
-  const d = Math.abs(dx);
-  if (d < minDist) {
-    const push = (minDist - d) * 4.2;
-    const dir = dx >= 0 ? 1 : -1;
-    a.x -= dir * push * 0.5 * dt;
-    b.x += dir * push * 0.5 * dt;
-    a.vx *= 0.92;
-    b.vx *= 0.92;
-  }
-}
-
-function rectHit(att, def, range, w, h) {
-  const hx = att.x + att.face * range;
-  const hy = -86;
-  const dx = def.x;
-  const dy = -86;
-  return dx > hx - w * 0.5 && dx < hx + w * 0.5 && dy > hy - h * 0.5 && dy < hy + h * 0.5;
-}
-
-function rollCrit(rng) {
-  return rng.f() < 0.15;
-}
-
-function rollSkillDamage(rng) {
-  let dmg = rng.int(SKILL_DMG_MIN, SKILL_DMG_MAX);
-  const crit = rollCrit(rng);
-  if (crit) dmg = Math.min(SKILL_DMG_MAX, Math.floor(dmg * 1.12));
+function damageRoll() {
+  // yêu cầu mới: min1209 max2290, nhiều kiểu đánh ngẫu nhiên
+  const crit = Math.random() < 0.15; // 15%
+  let dmg = randInt(1209, 2290);
+  // crit làm "đau" hơn chút, vẫn trong khung hợp lí
+  if (crit) dmg = clamp((dmg * 1.25) | 0, 1209, 2600);
   return { dmg, crit };
 }
 
-function rollAtkDamage(rng) {
-  let dmg = rng.int(271, 418);
-  const crit = rng.f() < 0.12;
-  if (crit) dmg = Math.min(520, Math.floor(dmg * 1.25));
-  return { dmg, crit };
-}
+// ===== gameplay constants =====
+const TICK_HZ = 30;
+const DT = 1 / TICK_HZ;
 
-function applyHit(att, def, dmg, crit, power, events) {
-  if (def.invul > 0) return false;
+const WORLD = {
+  floorY: 0,
+  left: -520,
+  right: 520,
+};
 
-  const range = power === "atk" ? 200 : power === "ult" ? 290 : 260;
-  const w = power === "atk" ? 160 : power === "ult" ? 240 : 220;
-  const h = power === "atk" ? 120 : power === "ult" ? 170 : 150;
+const PHYS = {
+  moveSpeed: 260,
+  moveSpeedWhileAtk: 165, // vừa đi vừa đánh nhưng chậm hơn
+  jumpV: 560,
+  gravity: 1650,
+  dashSpeed: 820,
+  dashTime: 0.11,
+};
 
-  if (!rectHit(att, def, range, w, h)) return false;
+function stepRoom(room) {
+  // if room empty, skip
+  if (room.players.size === 0) return;
 
-  def.hp = Math.max(0, def.hp - dmg);
-  def.stun = Math.max(def.stun, power === "ult" ? 0.18 : power === "skill" ? 0.14 : 0.10);
-  def.invul = Math.max(def.invul, power === "ult" ? 0.10 : power === "skill" ? 0.08 : 0.06);
-
-  const kb = power === "ult" ? 520 : power === "skill" ? 420 : 320;
-  def.vx = att.face * kb;
-  def.vy = -(power === "ult" ? 520 : power === "skill" ? 420 : 320);
-
-  events.push({ t: "hit", x: def.x, y: def.y, dmg, crit, power });
-
-  att.en = clamp(att.en + (power === "atk" ? 6 : power === "skill" ? 10 : 14), 0, 100);
-  return true;
-}
-
-function startAttack(f, rng) {
-  if (f.lock > 0 || f.stun > 0 || f.cdAtk > 0) return false;
-  f.state = "atk";
-  f.lock = 0.18;
-  f.cdAtk = 0.12;
-  f.atkT = 0;
-  f.didHit = false;
-  f.atkVar = rng.int(0, 3);
-  return true;
-}
-
-function startDash(f, dir) {
-  if (f.lock > 0 || f.stun > 0 || f.cdDash > 0) return false;
-  f.state = "dash";
-  f.lock = 0.06;
-  f.cdDash = 0.55;
-  const d = Math.abs(dir) > 0.2 ? sgn(dir) : f.face;
-  f.face = d;
-  f.vx = d * 2200; // dash nhanh
-  f.vy *= 0.10;
-  f.invul = Math.max(f.invul, 0.10);
-  return true;
-}
-
-function startJump(f) {
-  if (f.lock > 0 || f.stun > 0) return false;
-  if (f.y === 0) {
-    f.vy = -1100;
-    f.state = "jump";
-    return true;
+  // pick L and R
+  let L = null, R = null;
+  for (const p of room.players.values()) {
+    if (p.side === "L") L = p;
+    else R = p;
   }
-  return false;
-}
-
-function startSkill(f, which, rng) {
-  if (f.lock > 0 || f.stun > 0) return false;
-
-  if (which === "s1") {
-    if (f.cdS1 > 0 || f.en < 20) return false;
-    f.en -= 20; f.cdS1 = 1.1; f.lock = 0.28; f.state = "s1";
-  } else if (which === "s2") {
-    if (f.cdS2 > 0 || f.en < 25) return false;
-    f.en -= 25; f.cdS2 = 1.35; f.lock = 0.34; f.state = "s2";
-  } else if (which === "sub") {
-    if (f.cdSub > 0 || f.en < 15) return false;
-    f.en -= 15; f.cdSub = 0.9; f.lock = 0.22; f.state = "sub";
-  } else if (which === "ult") {
-    if (f.cdUlt > 0 || f.en < 100) return false;
-    f.en = 0; f.cdUlt = 3.2; f.lock = 0.55; f.state = "ult";
+  if (!L || !R) {
+    // 1 người thì vẫn update timer nhẹ
+    for (const p of room.players.values()) {
+      tickOne(p, null);
+    }
+    return;
   }
 
-  f.actT = 0;
-  f.didHit = false;
-  f.skillVar = rng.int(0, 2);
-  return true;
+  // face each other
+  L.face = L.x <= R.x ? 1 : -1;
+  R.face = -L.face;
+
+  // tick
+  tickOne(L, R);
+  tickOne(R, L);
+
+  // camera target (center between fighters)
+  const camX = (L.x + R.x) * 0.5;
+  room.camX = camX;
 }
 
-function stepRoom(room, dt) {
-  const { rng, L, R, inL, inR } = room;
-  const events = [];
+function tickOne(p, opp) {
+  // decrement timers
+  const dec = (k) => (p[k] = Math.max(0, p[k] - DT));
+  dec("invul"); dec("stun"); dec("atkLock");
+  dec("dashCd"); dec("jumpCd"); dec("s1Cd"); dec("s2Cd"); dec("ultCd"); dec("subCd");
 
-  function updateF(f, other, inp) {
-    f.lock = Math.max(0, f.lock - dt);
-    f.stun = Math.max(0, f.stun - dt);
-    f.invul = Math.max(0, f.invul - dt);
+  if (!opp) return;
 
-    f.cdDash = Math.max(0, f.cdDash - dt);
-    f.cdS1 = Math.max(0, f.cdS1 - dt);
-    f.cdS2 = Math.max(0, f.cdS2 - dt);
-    f.cdUlt = Math.max(0, f.cdUlt - dt);
-    f.cdSub = Math.max(0, f.cdSub - dt);
-    f.cdAtk = Math.max(0, f.cdAtk - dt);
+  // stunned -> cannot act, but still gravity
+  const canAct = p.stun <= 0;
 
-    // regen energy nhẹ
-    f.en = clamp(f.en + dt * 9, 0, 100);
+  // movement
+  let desired = clamp(p.inp.mx, -1, 1);
+  if (!canAct) desired = 0;
 
-    if (Math.abs(inp.mx) > 0.2 && f.stun <= 0) f.face = inp.mx > 0 ? 1 : -1;
+  const speed = p.atkLock > 0 ? PHYS.moveSpeedWhileAtk : PHYS.moveSpeed;
+  p.vx = desired * speed;
 
-    // one-shot actions from client
-    if (inp.jump) startJump(f);
-    if (inp.dash) startDash(f, inp.mx);
-    if (inp.atk) startAttack(f, rng);
-    if (inp.s1) startSkill(f, "s1", rng);
-    if (inp.s2) startSkill(f, "s2", rng);
-    if (inp.sub) startSkill(f, "sub", rng);
-    if (inp.ult) startSkill(f, "ult", rng);
+  // dash (edge)
+  if (canAct && p.edge.dash && p.dashCd <= 0) {
+    p.dashCd = 0.55;         // cooldown
+    p.invul = 0.14;          // i-frame
+    // dash direction: if input near 0, dash to face direction
+    const dir = Math.abs(p.inp.mx) > 0.15 ? Math.sign(p.inp.mx) : p.face;
+    p.vx = dir * PHYS.dashSpeed;
+    p._dashT = PHYS.dashTime;
+    // tiny stun immunity feel
+  }
+  p.edge.dash = false;
 
-    // move while attacking but slower + khựng
-    let slow = 1;
-    if (f.state === "atk") slow = 0.62;
-    if (f.state === "s1" || f.state === "s2" || f.state === "sub") slow = 0.45;
-    if (f.state === "ult") slow = 0.12;
-    if (f.stun > 0) slow = 0.0;
+  // jump (edge)
+  if (canAct && p.edge.jump && p.jumpCd <= 0 && p.grounded) {
+    p.jumpCd = 0.15;
+    p.grounded = false;
+    p.vy = -PHYS.jumpV;
+  }
+  p.edge.jump = false;
 
-    const move = 720;
-    const accel = 3600;
-    const target = inp.mx * (move * slow);
-    f.vx = lerp(f.vx, target, 1 - Math.exp(-accel * dt / move));
-    if (Math.abs(inp.mx) < 0.08) f.vx *= 0.86;
-
-    // physics
-    f.vy += 2600 * dt;
-    f.x += f.vx * dt;
-    f.y += f.vy * dt;
-
-    if (f.y >= 0) { f.y = 0; f.vy = 0; }
-
-    if (f.hp <= 0) { f.state = "dead"; return; }
-    if (f.stun > 0) { f.state = "stun"; }
-
-    // attack hit window
-    if (f.state === "atk") {
-      f.atkT += dt;
-      const roll = rollAtkDamage(rng);
-      const table = [
-        { t0: 0.05, t1: 0.10, mul: 1.00, power: "atk" },
-        { t0: 0.07, t1: 0.12, mul: 1.06, power: "atk" },
-        { t0: 0.04, t1: 0.09, mul: 0.94, power: "atk" },
-        { t0: 0.09, t1: 0.14, mul: 1.12, power: "atk" }
-      ];
-      const v = table[f.atkVar] || table[0];
-      if (!f.didHit && f.atkT >= v.t0 && f.atkT <= v.t1) {
-        const dmg = Math.floor(roll.dmg * v.mul);
-        if (applyHit(f, other, dmg, roll.crit, v.power, events)) f.didHit = true;
-      }
-      if (f.lock <= 0) f.state = "idle";
+  // apply dash time friction
+  if (p._dashT && p._dashT > 0) {
+    p._dashT = Math.max(0, p._dashT - DT);
+    if (p._dashT <= 0) {
+      // dash ends -> keep some momentum
+      p.vx *= 0.45;
     }
-
-    // skills
-    if (f.state === "s1" || f.state === "s2" || f.state === "sub" || f.state === "ult") {
-      f.actT += dt;
-
-      if (!f.didHit) {
-        if (f.state === "ult") {
-          if (f.actT >= 0.12 && f.actT <= 0.16) {
-            const r1 = rollSkillDamage(rng);
-            applyHit(f, other, r1.dmg, r1.crit, "ult", events);
-          }
-          if (f.actT >= 0.22 && f.actT <= 0.26) {
-            const r2 = rollSkillDamage(rng);
-            applyHit(f, other, r2.dmg, r2.crit, "ult", events);
-            f.didHit = true;
-          }
-          if (f.lock <= 0) f.state = "idle";
-        } else {
-          if (f.actT >= 0.08 && f.actT <= 0.14) {
-            const roll = rollSkillDamage(rng);
-            const mul = (f.state === "s2") ? 1.10 : (f.state === "sub" ? 0.90 : 1.00);
-            const dmg = Math.floor(roll.dmg * mul);
-            if (applyHit(f, other, dmg, roll.crit, "skill", events)) f.didHit = true;
-          }
-          if (f.lock <= 0) f.state = "idle";
-        }
-      }
-    }
-
-    if (f.state === "dash") {
-      if (f.lock <= 0) f.state = "idle";
-    }
-
-    if (f.y < 0 && f.state === "idle") f.state = "jump";
-    if (f.y === 0 && f.state === "jump" && f.vy >= 0) f.state = "idle";
   }
 
-  updateF(L, R, inL);
-  updateF(R, L, inR);
+  // gravity
+  if (!p.grounded) {
+    p.vy += PHYS.gravity * DT;
+  } else {
+    p.vy = 0;
+  }
 
-  separate(L, R, dt);
+  // integrate
+  p.x += p.vx * DT;
+  p.y += p.vy * DT;
 
-  // clear one-shot actions (movement stays)
-  room.inL.atk = room.inL.jump = room.inL.dash = room.inL.s1 = room.inL.s2 = room.inL.ult = room.inL.sub = false;
-  room.inR.atk = room.inR.jump = room.inR.dash = room.inR.s1 = room.inR.s2 = room.inR.ult = room.inR.sub = false;
+  // floor
+  if (p.y >= WORLD.floorY) {
+    p.y = WORLD.floorY;
+    p.grounded = true;
+    p.vy = 0;
+  }
 
-  room.tick++;
-  room._events = events;
-}
+  // bounds
+  p.x = clamp(p.x, WORLD.left, WORLD.right);
 
-// ---------- rooms/ws ----------
-const wss = new WebSocketServer({ server });
-const rooms = new Map();
+  // stop "hút" nhau: giữ khoảng cách tối thiểu
+  const minSep = 62;
+  const dx = p.x - opp.x;
+  if (Math.abs(dx) < minSep) {
+    const push = (minSep - Math.abs(dx)) * 0.5;
+    p.x += Math.sign(dx || (p.side === "L" ? -1 : 1)) * push;
+  }
 
-function genCode() {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
-}
-function send(ws, obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
-}
-function broadcast(room, obj) {
-  if (room.host) send(room.host, obj);
-  if (room.guest) send(room.guest, obj);
-}
-
-function createRoom(code) {
-  const seed = (Math.random() * 0xFFFFFFFF) >>> 0;
-  const rng = makeRng(seed);
-  return {
-    code,
-    seed,
-    rng,
-    host: null,
-    guest: null,
-    tick: 0,
-    inL: { mx: 0, atk: false, jump: false, dash: false, s1: false, s2: false, ult: false, sub: false },
-    inR: { mx: 0, atk: false, jump: false, dash: false, s1: false, s2: false, ult: false, sub: false },
-    L: Fighter(-1, rng),
-    R: Fighter(+1, rng),
-    _events: [],
-    _stateAcc: 0
+  // ===== attacks / skills (edge) =====
+  // common function: melee hit check
+  const tryHit = (kind, range, width, stunTime, energyGain, fxTag) => {
+    if (opp.invul > 0) return null;
+    const facing = p.face;
+    const hitCenterX = p.x + facing * range;
+    const dist = Math.abs(opp.x - hitCenterX);
+    const inFront = (opp.x - p.x) * facing > 0;
+    if (inFront && dist <= width) {
+      const { dmg, crit } = damageRoll();
+      opp.hp = Math.max(0, opp.hp - dmg);
+      opp.stun = Math.max(opp.stun, stunTime);
+      opp.invul = Math.max(opp.invul, 0.05); // micro i-frame to prevent multi-hit spam
+      p.en = clamp(p.en + energyGain, 0, 100);
+      return { kind, dmg, crit, x: (opp.x + p.x) * 0.5, y: -55, tag: fxTag };
+    }
+    return null;
   };
+
+  // ATTACK: random combo
+  if (canAct && p.edge.atk && p.atkLock <= 0) {
+    p.edge.atk = false;
+    p.atkLock = 0.22;
+    // combo variety
+    p.comboIdx = (p.comboIdx + 1) % 3;
+    const v = p.comboIdx;
+
+    let hit = null;
+    if (v === 0) hit = tryHit("atk1", 72, 68, 0.14, 8, "slashA");
+    if (v === 1) hit = tryHit("atk2", 84, 74, 0.16, 9, "slashB");
+    if (v === 2) hit = tryHit("atk3", 96, 78, 0.18, 10, "slashC");
+
+    if (hit) p._emitFx = hit;
+  } else {
+    p.edge.atk = false;
+  }
+
+  // S1
+  if (canAct && p.edge.s1 && p.s1Cd <= 0) {
+    p.edge.s1 = false;
+    p.s1Cd = 3.2;
+    p.atkLock = 0.35;
+    // longer range, small stun
+    const hit = tryHit("s1", 140, 110, 0.22, 14, "skill1");
+    if (hit) p._emitFx = hit;
+  } else {
+    p.edge.s1 = false;
+  }
+
+  // S2
+  if (canAct && p.edge.s2 && p.s2Cd <= 0) {
+    p.edge.s2 = false;
+    p.s2Cd = 4.4;
+    p.atkLock = 0.40;
+    // dash-slash forward
+    p.x += p.face * 52;
+    const hit = tryHit("s2", 155, 120, 0.26, 16, "skill2");
+    if (hit) p._emitFx = hit;
+  } else {
+    p.edge.s2 = false;
+  }
+
+  // SUB
+  if (canAct && p.edge.sub && p.subCd <= 0) {
+    p.edge.sub = false;
+    p.subCd = 5.0;
+    // quick backstep + invul
+    p.invul = Math.max(p.invul, 0.12);
+    p.x -= p.face * 70;
+    // optional small counter hit
+    const hit = tryHit("sub", 110, 95, 0.16, 8, "sub");
+    if (hit) p._emitFx = hit;
+  } else {
+    p.edge.sub = false;
+  }
+
+  // ULT (cinematic-lite)
+  if (canAct && p.edge.ult && p.ultCd <= 0 && p.en >= 70) {
+    p.edge.ult = false;
+    p.ultCd = 10.5;
+    p.en = Math.max(0, p.en - 70);
+    p.atkLock = 0.65;
+    // big range, big stun
+    const hit = tryHit("ult", 210, 170, 0.55, 0, "ult");
+    if (hit) p._emitFx = hit;
+    // give both screen flash feel
+    p._emitUlt = { x: p.x, y: -60 };
+  } else {
+    p.edge.ult = false;
+  }
+
+  // energy passive
+  p.en = clamp(p.en + DT * 3.5, 0, 100);
 }
 
-// sim loop
-setInterval(() => {
-  const dt = 1 / TICK_HZ;
-  for (const room of rooms.values()) {
-    if (!room.host || !room.guest) continue;
-
-    stepRoom(room, dt);
-
-    room._stateAcc += dt;
-    if (room._stateAcc >= 1 / STATE_HZ) {
-      room._stateAcc = 0;
-      broadcast(room, {
-        t: "state",
-        tick: room.tick,
-        s: { L: room.L, R: room.R },
-        events: room._events
-      });
-      room._events = [];
-    }
-
-    // auto rematch
-    if (room.L.hp <= 0 || room.R.hp <= 0) {
-      const newSeed = (Math.random() * 0xFFFFFFFF) >>> 0;
-      room.seed = newSeed;
-      room.rng = makeRng(newSeed);
-      room.L = Fighter(-1, room.rng);
-      room.R = Fighter(+1, room.rng);
-      room.tick = 0;
-      broadcast(room, { t: "start", seed: newSeed });
-    }
-  }
-}, Math.floor(1000 / TICK_HZ));
-
-wss.on("connection", (ws) => {
-  ws.on("message", (buf) => {
-    let msg;
-    try { msg = JSON.parse(buf.toString()); } catch { return; }
-
-    if (msg.t === "host") {
-      let code = genCode();
-      while (rooms.has(code)) code = genCode();
-      const room = createRoom(code);
-      room.host = ws;
-      rooms.set(code, room);
-      send(ws, { t: "room", code });
-      send(ws, { t: "side", side: "L" });
-      return;
-    }
-
-    if (msg.t === "join") {
-      const code = String(msg.code || "").toUpperCase();
-      const room = rooms.get(code);
-      if (!room) return send(ws, { t: "err", err: "Room not found" });
-      if (room.guest) return send(ws, { t: "err", err: "Room full" });
-      room.guest = ws;
-      send(ws, { t: "joined", code });
-      send(ws, { t: "side", side: "R" });
-      broadcast(room, { t: "start", seed: room.seed });
-      return;
-    }
-
-    if (msg.t === "leave") {
-      const code = String(msg.code || "").toUpperCase();
-      const room = rooms.get(code);
-      if (!room) return;
-      if (room.host === ws) room.host = null;
-      if (room.guest === ws) room.guest = null;
-      if (!room.host && !room.guest) rooms.delete(code);
-      else broadcast(room, { t: "peer-left" });
-      return;
-    }
-
-    if (msg.t === "in") {
-      const code = String(msg.code || "").toUpperCase();
-      const room = rooms.get(code);
-      if (!room) return;
-
-      const i = msg.i || {};
-      const inp = {
-        mx: clamp(Number(i.mx || 0), -1, 1),
-        atk: !!i.atk, jump: !!i.jump, dash: !!i.dash,
-        s1: !!i.s1, s2: !!i.s2, ult: !!i.ult, sub: !!i.sub
-      };
-
-      if (room.host === ws) {
-        room.inL.mx = inp.mx;
-        if (inp.atk) room.inL.atk = true;
-        if (inp.jump) room.inL.jump = true;
-        if (inp.dash) room.inL.dash = true;
-        if (inp.s1) room.inL.s1 = true;
-        if (inp.s2) room.inL.s2 = true;
-        if (inp.ult) room.inL.ult = true;
-        if (inp.sub) room.inL.sub = true;
-      } else if (room.guest === ws) {
-        room.inR.mx = inp.mx;
-        if (inp.atk) room.inR.atk = true;
-        if (inp.jump) room.inR.jump = true;
-        if (inp.dash) room.inR.dash = true;
-        if (inp.s1) room.inR.s1 = true;
-        if (inp.s2) room.inR.s2 = true;
-        if (inp.ult) room.inR.ult = true;
-        if (inp.sub) room.inR.sub = true;
-      }
-      return;
-    }
-
-    if (msg.t === "ping") {
-      send(ws, { t: "pong", ts: msg.ts });
-      return;
-    }
+// ===== network =====
+io.on("connection", (socket) => {
+  socket.on("room:create", (_, cb) => {
+    const id = makeRoomId();
+    ensureRoom(id);
+    cb?.({ ok: true, roomId: id });
   });
 
-  ws.on("close", () => {
-    for (const [code, room] of rooms) {
-      if (room.host === ws) room.host = null;
-      if (room.guest === ws) room.guest = null;
-      if (!room.host && !room.guest) rooms.delete(code);
-      else broadcast(room, { t: "peer-left" });
+  socket.on("room:join", ({ roomId }, cb) => {
+    roomId = String(roomId || "").toUpperCase().slice(0, 12);
+    if (!roomId) return cb?.({ ok: false, err: "NO_ROOM" });
+
+    const room = ensureRoom(roomId);
+
+    // limit 2 players
+    if (room.players.size >= 2) return cb?.({ ok: false, err: "FULL" });
+
+    // assign side
+    const side = room.players.size === 0 ? "L" : "R";
+    const p = makePlayer(side);
+
+    room.players.set(socket.id, p);
+    socket.join(roomId);
+    socket.data.roomId = roomId;
+
+    cb?.({ ok: true, roomId, side, seed: room.seed });
+
+    // notify others
+    io.to(roomId).emit("room:info", { count: room.players.size });
+  });
+
+  socket.on("inp", ({ seq, inp, edge }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const p = room.players.get(socket.id);
+    if (!p) return;
+
+    // save inputs (authoritative server uses them)
+    if (inp && typeof inp.mx === "number") p.inp.mx = clamp(inp.mx, -1, 1);
+    const bools = ["atk", "dash", "jump", "s1", "s2", "ult", "sub"];
+    for (const k of bools) p.inp[k] = !!inp?.[k];
+
+    // edges (one-shot)
+    if (edge) {
+      for (const k of bools) {
+        if (edge[k]) p.edge[k] = true;
+      }
+    }
+    p._seq = seq | 0;
+  });
+
+  socket.on("disconnect", () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.players.delete(socket.id);
+
+    if (room.players.size === 0) {
+      rooms.delete(roomId);
+    } else {
+      io.to(roomId).emit("room:info", { count: room.players.size });
     }
   });
 });
 
-server.listen(PORT, () => console.log("Server running on port", PORT));
+// ===== server tick loop =====
+setInterval(() => {
+  for (const [roomId, room] of rooms) {
+    stepRoom(room);
+
+    // build snapshot
+    let L = null, R = null;
+    for (const p of room.players.values()) {
+      if (p.side === "L") L = p;
+      else R = p;
+    }
+
+    // FX gather (reset after send)
+    const fx = { slashes: [], popups: [], ult: null };
+
+    for (const p of room.players.values()) {
+      if (p._emitFx) {
+        fx.slashes.push({
+          wx: p._emitFx.x,
+          wy: p._emitFx.y,
+          kind: p._emitFx.tag,
+          rot: (Math.random() * 0.6 - 0.3),
+          len: p._emitFx.tag === "ult" ? 240 : 160,
+          w: p._emitFx.tag === "ult" ? 22 : 14,
+          life: p._emitFx.tag === "ult" ? 0.30 : 0.18,
+          t: 0,
+        });
+        fx.popups.push({
+          wx: p._emitFx.x,
+          wy: p._emitFx.y - 30,
+          text: String(p._emitFx.dmg),
+          crit: !!p._emitFx.crit,
+          life: 0.55,
+          t: 0,
+        });
+        p._emitFx = null;
+      }
+      if (p._emitUlt) {
+        fx.ult = { wx: p._emitUlt.x, wy: p._emitUlt.y, life: 0.55, t: 0 };
+        p._emitUlt = null;
+      }
+    }
+
+    const snap = {
+      t: Date.now(),
+      camX: room.camX || 0,
+      L: L && {
+        x: L.x, y: L.y, face: L.face,
+        hp: L.hp, maxHp: L.maxHp,
+        en: L.en, invul: L.invul, stun: L.stun
+      },
+      R: R && {
+        x: R.x, y: R.y, face: R.face,
+        hp: R.hp, maxHp: R.maxHp,
+        en: R.en, invul: R.invul, stun: R.stun
+      },
+      fx,
+      count: room.players.size,
+    };
+
+    io.to(roomId).emit("snap", snap);
+  }
+}, 1000 / TICK_HZ);
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log("Server listening on", PORT));
