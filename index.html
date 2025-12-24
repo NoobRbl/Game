@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>Nova Arena – Online Anime 2D Fighter</title>
+<title>Nova Arena – Online 1 Code (16:9)</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#05070e;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#fff}
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#fff}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 
-  /* ===== MENU ===== */
+  /* MENU */
   #menu{
     position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(circle at 50% 0%, rgba(90,140,255,.25), rgba(5,7,14,1));
+    background:radial-gradient(circle at 50% 0%, rgba(90,140,255,.25), rgba(0,0,0,1));
     pointer-events:auto;
   }
   .panel{
@@ -28,11 +28,7 @@
   .pill{padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.10);font-size:12px;opacity:.9}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media (max-width:860px){.grid{grid-template-columns:1fr}}
-  .box{
-    padding:14px;border-radius:18px;
-    background:rgba(0,0,0,.18);
-    border:1px solid rgba(255,255,255,.10);
-  }
+  .box{padding:14px;border-radius:18px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.10)}
   .h{font-weight:900;margin:0 0 10px}
   .p{margin:0;opacity:.75;font-size:12px;line-height:1.35}
   input{
@@ -43,44 +39,35 @@
     font-weight:900;letter-spacing:.8px;text-transform:uppercase;
   }
   .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-  .btn{
-    border:none;border-radius:14px;padding:10px 12px;
-    font-weight:950;letter-spacing:.2px;cursor:pointer;
-    background:rgba(255,255,255,.92);color:#0a0d16;
-  }
-  .btn2{
-    border:1px solid rgba(255,255,255,.16);
-    border-radius:14px;padding:10px 12px;
-    font-weight:900;cursor:pointer;
-    background:rgba(255,255,255,.08);color:rgba(255,255,255,.92);
-  }
+  .btn{border:none;border-radius:14px;padding:10px 12px;font-weight:950;cursor:pointer;background:rgba(255,255,255,.92);color:#0a0d16;}
+  .btn2{border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:10px 12px;font-weight:900;cursor:pointer;background:rgba(255,255,255,.08);color:rgba(255,255,255,.92);}
   .small{font-size:12px;opacity:.72;margin-top:8px}
   .ok{color:rgba(110,255,190,.92)}
   .bad{color:rgba(255,130,140,.92)}
 
-  /* ===== HUD ===== */
+  /* HUD */
   #hud{
     position:fixed;left:0;right:0;top:0;padding:10px 14px;
     display:none;gap:12px;justify-content:center;align-items:center;
     pointer-events:none;
   }
   .hudBlock{
-    display:flex;gap:8px;align-items:center;
+    display:flex;gap:10px;align-items:center;
     background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.12);
     border-radius:16px;padding:8px 10px;
     backdrop-filter:blur(10px);
   }
-  .lbl{opacity:.7;font-size:12px;font-weight:900;letter-spacing:.3px}
+  .lbl{opacity:.7;font-size:12px;font-weight:950;letter-spacing:.3px;min-width:56px}
   .barWrap{width:min(420px,36vw);height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
   .bar{height:100%;width:100%;transform-origin:left center}
-  #p1hp{background:linear-gradient(90deg,#2ee59d,#5bf3ff)}
-  #p2hp{background:linear-gradient(90deg,#ff4d7d,#ffb86b)}
-  #p1en{background:linear-gradient(90deg,#a855f7,#60a5fa)}
-  #p2en{background:linear-gradient(90deg,#7c3aed,#f472b6)}
-  #roundInfo{position:fixed;top:48px;left:50%;transform:translateX(-50%);font-weight:950;opacity:.9;display:none;pointer-events:none}
+  #Lhp{background:linear-gradient(90deg,#2ee59d,#5bf3ff)}
+  #Rhp{background:linear-gradient(90deg,#ff4d7d,#ffb86b)}
+  #Len{background:linear-gradient(90deg,#a855f7,#60a5fa)}
+  #Ren{background:linear-gradient(90deg,#7c3aed,#f472b6)}
+  #info{position:fixed;top:48px;left:50%;transform:translateX(-50%);font-weight:950;opacity:.92;display:none;pointer-events:none}
 
-  /* ===== Mobile controls ===== */
+  /* Mobile controls */
   #controls{position:fixed;inset:0;pointer-events:none;display:none}
   .joy{
     position:fixed;width:160px;height:160px;border-radius:999px;
@@ -107,7 +94,6 @@
   .act .t{color:rgba(255,255,255,.95);font-weight:950}
   .act .s{color:rgba(255,255,255,.55);font-size:11px;margin-top:2px}
 
-  /* layout: right side buttons */
   #bAtk{right:26px;bottom:26px}
   #bDash{right:26px;bottom:118px}
   #bJump{right:26px;bottom:210px}
@@ -125,18 +111,17 @@
 <body>
 <canvas id="cv"></canvas>
 
-<!-- MENU -->
 <div id="menu">
   <div class="panel">
     <div class="top">
-      <div class="logo">NOVA ARENA • ONLINE 1 CODE • ASSASSIN FIGHTER</div>
+      <div class="logo">NOVA ARENA • ONLINE 1 CODE • 16:9</div>
       <div class="pill" id="status">Offline</div>
     </div>
 
     <div class="grid">
       <div class="box">
         <div class="h">HOST</div>
-        <p class="p">Bấm <b>Host</b> để tạo phòng. Gửi <b>ROOM CODE</b> cho bạn bè, họ nhập vào Join là vào luôn.</p>
+        <p class="p">Host điều khiển <b>nhân vật bên trái</b>. Gửi <b>ROOM CODE</b> cho bạn bè.</p>
         <div class="row">
           <button class="btn2" id="btnHost">Host</button>
           <button class="btn2" id="btnCopy">Copy Code</button>
@@ -149,7 +134,7 @@
 
       <div class="box">
         <div class="h">JOIN</div>
-        <p class="p">Nhập ROOM CODE → bấm Join. Khi connect xong game tự bắt đầu.</p>
+        <p class="p">Guest điều khiển <b>nhân vật bên phải</b>. Nhập code → Join.</p>
         <div class="small">Room Code:</div>
         <input id="roomIn" placeholder="VD: A3K9QZ" maxlength="6" />
         <div class="row">
@@ -157,33 +142,31 @@
           <button class="btn2" id="btnLeaveJ">Leave</button>
         </div>
         <div class="small">
-          <b>PC keys</b>: WASD move • J atk • K jump • L dash • U skill1 • I skill2 • O ult • P sub
+          Keys: WASD • J atk • K jump • L dash • U S1 • I S2 • O ult • P sub
         </div>
       </div>
     </div>
 
     <div class="small">
-      Khi <span class="ok">Connected</span> xong, 2 người sẽ “Ready” và match bắt đầu.
+      Khi <span class="ok">Connected</span> xong, host phát “seed” → 2 bên tạo HP/Damage giống nhau → match bắt đầu.
     </div>
   </div>
 </div>
 
-<!-- HUD -->
 <div id="hud">
   <div class="hudBlock">
-    <div class="lbl">YOU</div>
-    <div class="barWrap"><div id="p1hp" class="bar"></div></div>
-    <div class="barWrap"><div id="p1en" class="bar"></div></div>
+    <div class="lbl" id="Lname">LEFT</div>
+    <div class="barWrap"><div id="Lhp" class="bar"></div></div>
+    <div class="barWrap"><div id="Len" class="bar"></div></div>
   </div>
   <div class="hudBlock">
-    <div class="lbl">FOE</div>
-    <div class="barWrap"><div id="p2hp" class="bar"></div></div>
-    <div class="barWrap"><div id="p2en" class="bar"></div></div>
+    <div class="lbl" id="Rname">RIGHT</div>
+    <div class="barWrap"><div id="Rhp" class="bar"></div></div>
+    <div class="barWrap"><div id="Ren" class="bar"></div></div>
   </div>
 </div>
-<div id="roundInfo"></div>
+<div id="info"></div>
 
-<!-- Mobile controls -->
 <div id="controls">
   <div class="joy" id="joyL"><div class="ring"><div class="stick" id="stickL"></div></div></div>
 
@@ -196,39 +179,80 @@
   <div class="act" id="bUlt"><div class="t">ULT</div><div class="s">O</div></div>
   <div class="act" id="bSub"><div class="t">SUB</div><div class="s">P</div></div>
 </div>
-<div id="hint">Online synced • Mobile: joystick + buttons</div>
+<div id="hint">16:9 Letterbox • Mobile joystick + buttons</div>
 
 <script>
 (() => {
-  /* ===================== Utils ===================== */
+  /* ================= Utils ================= */
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const lerp=(a,b,t)=>a+(b-a)*t;
   const sign=v=>v<0?-1:1;
-  const rand=(a,b)=>a+Math.random()*(b-a);
-  const randi=(a,b)=>Math.floor(a+Math.random()*(b-a+1));
   const now=()=>performance.now();
 
-  /* ===================== Canvas ===================== */
+  // seeded rng (Mulberry32)
+  function mulberry32(seed){
+    let t=seed>>>0;
+    return function(){
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ (t>>>15), 1 | t);
+      r ^= r + Math.imul(r ^ (r>>>7), 61 | r);
+      return ((r ^ (r>>>14))>>>0) / 4294967296;
+    }
+  }
+  let RNG = mulberry32(123456789);
+  const randi=(a,b)=>Math.floor(a + RNG()*(b-a+1));
+
+  /* ===== 16:9 View (letterbox) ===== */
   const cv=document.getElementById("cv");
   const ctx=cv.getContext("2d");
+
+  const VIEW={x:0,y:0,w:0,h:0,dpr:1};
+
   function resize(){
-    const dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
-    cv.width=Math.floor(innerWidth*dpr);
-    cv.height=Math.floor(innerHeight*dpr);
+    VIEW.dpr = Math.max(1, Math.min(2, devicePixelRatio||1));
+    cv.width = Math.floor(innerWidth*VIEW.dpr);
+    cv.height= Math.floor(innerHeight*VIEW.dpr);
+
+    // fit 16:9 inside screen
+    const W=cv.width, H=cv.height;
+    const target = 16/9;
+    let vw=W, vh=Math.floor(W/target);
+    if(vh>H){ vh=H; vw=Math.floor(H*target); }
+    VIEW.w=vw; VIEW.h=vh;
+    VIEW.x=Math.floor((W - vw)/2);
+    VIEW.y=Math.floor((H - vh)/2);
   }
   addEventListener("resize", resize, {passive:true});
   resize();
 
-  /* ===================== UI ===================== */
+  function beginView(){
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cv.width,cv.height);
+
+    // black bars
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,cv.width,cv.height);
+
+    // draw game area
+    ctx.save();
+    ctx.translate(VIEW.x, VIEW.y);
+    // everything below uses VIEW.w/h coordinates
+  }
+  function endView(){ ctx.restore(); }
+
+  /* ================= UI ================= */
   const status=document.getElementById("status");
   const menu=document.getElementById("menu");
   const hud=document.getElementById("hud");
-  const roundInfo=document.getElementById("roundInfo");
+  const info=document.getElementById("info");
   const hostNote=document.getElementById("hostNote");
   const roomOut=document.getElementById("roomOut");
   const roomIn=document.getElementById("roomIn");
   const hint=document.getElementById("hint");
   const controls=document.getElementById("controls");
+
+  const Lname=document.getElementById("Lname");
+  const Rname=document.getElementById("Rname");
 
   function setStatus(text, ok=true){
     status.textContent=text;
@@ -245,13 +269,11 @@
     }
   }
 
-  /* ===================== Input mapping ===================== */
-  // PC keys: WASD move, J atk, K jump, L dash, U S1, I S2, O ult, P sub
+  /* ================= Input ================= */
   const keys=new Set();
   addEventListener("keydown",(e)=>keys.add(e.key.toLowerCase()),{passive:true});
   addEventListener("keyup",(e)=>keys.delete(e.key.toLowerCase()),{passive:true});
 
-  // Mobile buttons
   const touch={atk:false,dash:false,jump:false,s1:false,s2:false,ult:false,sub:false};
   const bindBtn=(id,name)=>{
     const el=document.getElementById(id);
@@ -261,15 +283,9 @@
     el.addEventListener("pointercancel",up,{passive:false});
     el.addEventListener("pointerleave",up,{passive:false});
   };
-  bindBtn("bAtk","atk");
-  bindBtn("bDash","dash");
-  bindBtn("bJump","jump");
-  bindBtn("bS1","s1");
-  bindBtn("bS2","s2");
-  bindBtn("bUlt","ult");
-  bindBtn("bSub","sub");
+  bindBtn("bAtk","atk"); bindBtn("bDash","dash"); bindBtn("bJump","jump");
+  bindBtn("bS1","s1"); bindBtn("bS2","s2"); bindBtn("bUlt","ult"); bindBtn("bSub","sub");
 
-  // Joystick
   const joyL=document.getElementById("joyL");
   const stickL=document.getElementById("stickL");
   const joyVec={x:0,y:0};
@@ -304,29 +320,19 @@
     joyL.addEventListener("pointercancel",end,{passive:true});
   })();
 
-  function makeInput(){ return {mx:0,my:0, atk:false, jump:false, dash:false, s1:false, s2:false, ult:false, sub:false}; }
+  function makeInput(){ return {mx:0, atk:false, jump:false, dash:false, s1:false, s2:false, ult:false, sub:false}; }
 
-  // edge trigger
   function edgeTracker(){ const s={}; return (k,down)=>{ if(down && !s[k]){s[k]=true; return true;} if(!down) s[k]=false; return false; }; }
   const once=edgeTracker();
 
   function readLocalInput(){
     const inp=makeInput();
-
-    // Move from WASD + joystick
-    let x=0,y=0;
+    let x=0;
     if(keys.has("a")) x-=1;
     if(keys.has("d")) x+=1;
-    if(keys.has("w")) y-=1;
-    if(keys.has("s")) y+=1;
-
     x += joyVec.x*1.05;
-    y += joyVec.y*1.05;
-
     inp.mx = clamp(x,-1,1);
-    inp.my = clamp(y,-1,1);
 
-    // actions (use key mapping requested)
     inp.atk  = keys.has("j") || touch.atk;
     inp.jump = keys.has("k") || touch.jump;
     inp.dash = keys.has("l") || touch.dash;
@@ -334,11 +340,10 @@
     inp.s2   = keys.has("i") || touch.s2;
     inp.ult  = keys.has("o") || touch.ult;
     inp.sub  = keys.has("p") || touch.sub;
-
     return inp;
   }
 
-  /* ===================== Game constants ===================== */
+  /* ================= Game ================= */
   const WORLD={
     floorRel:0.79,
     grav:2600,
@@ -346,66 +351,43 @@
     shake:0, shakeT:0,
     flash:0, flashT:0,
   };
-  const floorY=()=>cv.height*WORLD.floorRel;
-
+  const floorY=()=>VIEW.h*WORLD.floorRel;
   function w2s(wx,wy){
-    return {x: cv.width/2 + (wx - WORLD.camX), y: floorY() + wy};
+    return {x: VIEW.w/2 + (wx - WORLD.camX), y: floorY() + wy};
   }
   function startShake(d,p){ WORLD.shakeT=Math.max(WORLD.shakeT,d); WORLD.shake=Math.max(WORLD.shake,p); }
   function startFlash(i,d){ WORLD.flashT=Math.max(WORLD.flashT,d); WORLD.flash=Math.max(WORLD.flash,i); }
 
-  /* ===================== Damage rule (your requirement) ===================== */
-  // HP random 20109-36098
-  // Damage normal 271-399
-  // Crit damage 400-418 with 15%
+  // HP random 20109-36098; Damage normal 271-399; Crit 400-418 15%
   function rollHP(){ return randi(20109,36098); }
   function rollDamage(){
-    const crit = Math.random() < 0.15;
+    const crit = (RNG() < 0.15);
     if(crit) return {dmg:randi(400,418), crit:true};
     return {dmg:randi(271,399), crit:false};
   }
 
-  /* ===================== Fighter Model (assassin vector + anim) ===================== */
   function Fighter(side){
     const hp = rollHP();
     return {
-      side, // +1 = you left, -1 = foe right (we mirror)
-      x: side>0 ? -280 : 280,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      face: side>0 ? 1 : -1,
+      side, // -1 left, +1 right in WORLD coords? (we use face separately)
+      x: side<0 ? -280 : 280,
+      y: 0, vx: 0, vy: 0,
+      face: side<0 ? 1 : -1, // left faces right; right faces left
       hp, hpMax: hp,
-      en: 100, enMax: 100, // energy for skills/ult
-      state: "idle",
-      t: 0,
-      lock: 0,
-      stun: 0,
-      invul: 0,
-      cdDash: 0,
-      cdS1: 0,
-      cdS2: 0,
-      cdUlt: 0,
-      cdSub: 0,
-      atkCd: 0,
-      combo: 0,
-      comboT: 0,
-      // stats feel
-      move: 680,
-      dashSpd: 1900,
-      jump: 1080,
-      // hit
-      hitstop:0,
-      // internal
-      didHit:false,
-      // ult sequence
-      ult: null,
+      en: 100, enMax: 100,
+      state:"idle", t:0,
+      lock:0, stun:0, invul:0,
+      cdDash:0, cdS1:0, cdS2:0, cdUlt:0, cdSub:0,
+      atkCd:0,
+      combo:0, comboT:0,
+      move:680, dashSpd:2100, jump:1080,
+      hitstop:0, didHit:false,
+      ult:null
     };
   }
 
-  let P1=null, P2=null;
+  let Left=null, Right=null;
 
-  /* ===================== FX ===================== */
   const popups=[], slashes=[], sparks=[];
   function spawnPopup(wx,wy,text,crit){
     const s=w2s(wx,wy);
@@ -413,24 +395,22 @@
   }
   function spawnSlash(wx,wy,dir,kind){
     const s=w2s(wx,wy);
-    const n = (kind==="ult")? 4 : (kind==="skill"? 3 : 2);
+    const n=(kind==="ult")?4:(kind==="skill"?3:2);
     for(let i=0;i<n;i++){
       slashes.push({
         x:s.x+(Math.random()-0.5)*16,
         y:s.y+(Math.random()-0.5)*12,
-        dir,
-        kind,
-        t:0,
-        life: kind==="ult"?0.24:0.17,
-        rot: (-0.8 + i*0.24) + (Math.random()-0.5)*0.20,
-        len: (kind==="ult"? 320 : kind==="skill"? 260 : 220) * (0.85+Math.random()*0.25),
-        w: (kind==="ult"? 12 : kind==="skill"? 9 : 7) * (0.85+Math.random()*0.25),
+        dir, kind, t:0,
+        life:(kind==="ult")?0.24:0.17,
+        rot:(-0.8+i*0.24)+(Math.random()-0.5)*0.20,
+        len:((kind==="ult")?320:(kind==="skill")?260:220)*(0.85+Math.random()*0.25),
+        w:((kind==="ult")?12:(kind==="skill")?9:7)*(0.85+Math.random()*0.25),
       });
     }
   }
   function spawnSparks(wx,wy,dir,power){
     const s=w2s(wx,wy);
-    const count = power==="ult"? 28 : power==="skill"? 18 : 12;
+    const count = power==="ult"?28:power==="skill"?18:12;
     for(let i=0;i<count;i++){
       const a=Math.random()*Math.PI*2;
       const spd=(power==="ult"?1100:power==="skill"?860:650)*(0.5+Math.random()*0.6);
@@ -444,148 +424,95 @@
     }
   }
 
-  /* ===================== Hitbox & Combat ===================== */
   function rectHit(att, def, range, w, h){
-    const hx = att.x + att.face*range;
-    const hy = att.y - 86;
-
-    const dx = def.x;
-    const dy = def.y - 86;
-
-    // attacker box centered at hx/hy
-    return (dx > hx - w*0.5 && dx < hx + w*0.5 && dy > hy - h*0.5 && dy < hy + h*0.5);
+    const hx=att.x + att.face*range;
+    const hy=att.y - 86;
+    const dx=def.x;
+    const dy=def.y - 86;
+    return (dx > hx-w*0.5 && dx < hx+w*0.5 && dy > hy-h*0.5 && dy < hy+h*0.5);
   }
 
   function applyHit(att, def, baseMul, power){
     if(def.invul>0) return false;
+    const range = power==="atk"?175: power==="skill"?240:210;
+    const w = power==="atk"?150: power==="skill"?220:190;
+    const h = power==="atk"?120: power==="skill"?150:140;
+    if(!rectHit(att,def,range,w,h)) return false;
 
-    const range = power==="atk"? 175 : power==="skill"? 240 : 210;
-    const w = power==="atk"? 150 : power==="skill"? 220 : 190;
-    const h = power==="atk"? 120 : power==="skill"? 150 : 140;
+    const roll=rollDamage();
+    const dmg=Math.floor(roll.dmg*baseMul);
 
-    if(!rectHit(att, def, range, w, h)) return false;
-
-    const roll = rollDamage();
-    const dmg = Math.floor(roll.dmg * baseMul);
-
-    def.hp = Math.max(0, def.hp - dmg);
-    def.stun = Math.max(def.stun, power==="ult"?0.26: power==="skill"?0.20:0.16);
-    def.invul= Math.max(def.invul, power==="ult"?0.16: power==="skill"?0.12:0.10);
+    def.hp=Math.max(0, def.hp-dmg);
+    def.stun=Math.max(def.stun, power==="ult"?0.26:power==="skill"?0.20:0.16);
+    def.invul=Math.max(def.invul, power==="ult"?0.16:power==="skill"?0.12:0.10);
 
     const dir=att.face;
-    def.vx = dir*(power==="ult"?620: power==="skill"?520:420);
-    def.vy = -(power==="ult"?620: power==="skill"?520:420);
+    def.vx = dir*(power==="ult"?620:power==="skill"?520:420);
+    def.vy = -(power==="ult"?620:power==="skill"?520:420);
 
     spawnPopup(def.x, def.y-120, String(dmg), roll.crit);
-    spawnSlash(def.x, def.y-90, dir, power==="ult"?"ult": (power==="skill"?"skill":"atk"));
-    spawnSparks(def.x, def.y-92, dir, power==="ult"?"ult": (power==="skill"?"skill":"atk"));
+    spawnSlash(def.x, def.y-90, dir, power==="ult"?"ult":(power==="skill"?"skill":"atk"));
+    spawnSparks(def.x, def.y-92, dir, power==="ult"?"ult":(power==="skill"?"skill":"atk"));
 
-    startShake(0.06, power==="ult"?18: power==="skill"?14:12);
+    startShake(0.06, power==="ult"?18:power==="skill"?14:12);
     startFlash(power==="ult"?0.45:0.22, power==="ult"?0.09:0.06);
 
-    att.hitstop = Math.max(att.hitstop, power==="ult"?0.05:0.04);
-    def.hitstop = Math.max(def.hitstop, power==="ult"?0.03:0.024);
+    att.hitstop=Math.max(att.hitstop, power==="ult"?0.05:0.04);
+    def.hitstop=Math.max(def.hitstop, power==="ult"?0.03:0.024);
 
-    // energy gain
-    att.en = clamp(att.en + (roll.crit? 10: 7), 0, 100);
+    att.en = clamp(att.en + (roll.crit?10:7), 0, 100);
     return true;
   }
 
-  /* ===================== Actions ===================== */
   function doJump(f){
     if(f.lock>0||f.stun>0) return;
-    if(f.y===0){
-      f.vy = -f.jump;
-      f.state="jump";
-      f.t=0;
-    }
+    if(f.y===0){ f.vy=-f.jump; f.state="jump"; f.t=0; }
   }
   function doDash(f, dir){
     if(f.lock>0||f.stun>0) return;
     if(f.cdDash>0) return;
-    f.cdDash=0.60;
-    f.invul=Math.max(f.invul, 0.12);
-    f.lock=0.08;
-    f.state="dash";
-    f.t=0;
+    f.cdDash=0.60; f.invul=Math.max(f.invul,0.12);
+    f.lock=0.08; f.state="dash"; f.t=0;
     const d = Math.abs(dir)>0.2 ? sign(dir) : f.face;
     f.face=d;
     f.vx = d*f.dashSpd;
     f.vy *= 0.10;
     startShake(0.05,10);
   }
-
   function doAttack(f){
     if(f.lock>0||f.stun>0) return;
     if(f.atkCd>0) return;
     f.atkCd=0.14;
-
-    // combo windows
-    if(f.comboT<=0){ f.combo=0; }
+    if(f.comboT<=0) f.combo=0;
     f.comboT=0.85;
     f.combo=(f.combo+1)%3;
-
     f.lock=0.22 + f.combo*0.02;
-    f.state="atk";
-    f.t=0;
-    f.didHit=false;
+    f.state="atk"; f.t=0; f.didHit=false;
   }
-
   function doSkill1(f){
-    if(f.lock>0||f.stun>0) return;
-    if(f.cdS1>0) return;
-    if(f.en<20) return;
-    f.en-=20;
-    f.cdS1=1.2;
-    f.lock=0.38;
-    f.state="s1";
-    f.t=0;
-    f.didHit=false;
+    if(f.lock>0||f.stun>0||f.cdS1>0||f.en<20) return;
+    f.en-=20; f.cdS1=1.2; f.lock=0.38; f.state="s1"; f.t=0; f.didHit=false;
     startFlash(0.18,0.05);
   }
   function doSkill2(f){
-    if(f.lock>0||f.stun>0) return;
-    if(f.cdS2>0) return;
-    if(f.en<25) return;
-    f.en-=25;
-    f.cdS2=1.5;
-    f.lock=0.46;
-    f.state="s2";
-    f.t=0;
-    f.didHit=false;
+    if(f.lock>0||f.stun>0||f.cdS2>0||f.en<25) return;
+    f.en-=25; f.cdS2=1.5; f.lock=0.46; f.state="s2"; f.t=0; f.didHit=false;
     startFlash(0.18,0.05);
   }
   function doSub(f){
-    if(f.lock>0||f.stun>0) return;
-    if(f.cdSub>0) return;
-    if(f.en<15) return;
-    f.en-=15;
-    f.cdSub=0.9;
-    f.lock=0.28;
-    f.state="sub";
-    f.t=0;
-    f.didHit=false;
+    if(f.lock>0||f.stun>0||f.cdSub>0||f.en<15) return;
+    f.en-=15; f.cdSub=0.9; f.lock=0.28; f.state="sub"; f.t=0; f.didHit=false;
   }
   function doUlt(f, def){
-    if(f.lock>0||f.stun>0) return;
-    if(f.cdUlt>0) return;
-    if(f.en<100) return;
-    f.en=0;
-    f.cdUlt=3.0;
-    f.lock=0.95;
-    f.state="ult";
-    f.t=0;
+    if(f.lock>0||f.stun>0||f.cdUlt>0||f.en<100) return;
+    f.en=0; f.cdUlt=3.0; f.lock=0.95; f.state="ult"; f.t=0;
     f.ult={tele:false, idx:0, hits:[0.20,0.33,0.47,0.62]};
-    startFlash(0.45,0.10);
-    startShake(0.07,18);
+    startFlash(0.45,0.10); startShake(0.07,18);
   }
 
-  /* ===================== Update fighter ===================== */
-  function applyGround(f){
-    if(f.y>=0){ f.y=0; f.vy=0; }
-  }
+  function applyGround(f){ if(f.y>=0){ f.y=0; f.vy=0; } }
+
   function updateFighter(f, def, dt, inp, idPrefix){
-    // cooldowns
     f.lock=Math.max(0,f.lock-dt);
     f.stun=Math.max(0,f.stun-dt);
     f.invul=Math.max(0,f.invul-dt);
@@ -597,26 +524,18 @@
     f.atkCd=Math.max(0,f.atkCd-dt);
     f.comboT=Math.max(0,f.comboT-dt);
 
-    if(f.hitstop>0){
-      f.hitstop=Math.max(0,f.hitstop-dt);
-      return;
-    }
+    if(f.hitstop>0){ f.hitstop=Math.max(0,f.hitstop-dt); return; }
 
-    // edge triggers
-    const jumpOnce = once(idPrefix+"_jump", inp.jump);
-    const atkOnce  = once(idPrefix+"_atk",  inp.atk);
-    const dashOnce = once(idPrefix+"_dash", inp.dash);
-    const s1Once   = once(idPrefix+"_s1",   inp.s1);
-    const s2Once   = once(idPrefix+"_s2",   inp.s2);
-    const ultOnce  = once(idPrefix+"_ult",  inp.ult);
-    const subOnce  = once(idPrefix+"_sub",  inp.sub);
+    const jumpOnce=once(idPrefix+"_jump", inp.jump);
+    const atkOnce =once(idPrefix+"_atk",  inp.atk);
+    const dashOnce=once(idPrefix+"_dash", inp.dash);
+    const s1Once  =once(idPrefix+"_s1",   inp.s1);
+    const s2Once  =once(idPrefix+"_s2",   inp.s2);
+    const ultOnce =once(idPrefix+"_ult",  inp.ult);
+    const subOnce =once(idPrefix+"_sub",  inp.sub);
 
-    // facing by move
-    if(Math.abs(inp.mx)>0.2 && f.stun<=0 && f.state!=="ult"){
-      f.face = inp.mx>0?1:-1;
-    }
+    if(Math.abs(inp.mx)>0.2 && f.stun<=0 && f.state!=="ult") f.face = inp.mx>0?1:-1;
 
-    // actions
     if(jumpOnce) doJump(f);
     if(dashOnce) doDash(f, inp.mx);
     if(atkOnce)  doAttack(f);
@@ -625,92 +544,67 @@
     if(subOnce)  doSub(f);
     if(ultOnce)  doUlt(f, def);
 
-    // movement slow while attacking/skills
     let slow=1;
     if(f.state==="atk") slow=0.62;
     if(f.state==="s1"||f.state==="s2"||f.state==="sub") slow=0.45;
     if(f.state==="ult") slow=0.0;
     if(f.stun>0) slow=0.0;
 
-    // physics
     const accel=3300;
-    const target = inp.mx * (f.move*slow);
+    const target = inp.mx*(f.move*slow);
     f.vx = lerp(f.vx, target, 1 - Math.exp(-accel*dt/Math.max(260,f.move)));
     if(Math.abs(inp.mx)<0.08) f.vx*=0.86;
 
     f.vy += WORLD.grav*dt;
-
-    f.x += f.vx*dt;
-    f.y += f.vy*dt;
+    f.x += f.vx*dt; f.y += f.vy*dt;
     applyGround(f);
 
-    // states fallback
     if(f.hp<=0){ f.state="dead"; return; }
     if(f.stun>0) f.state="stun";
     else if(f.state==="ult") f.state="ult";
-    else if(f.lock>0 && ["atk","dash","s1","s2","sub"].includes(f.state)) {/* keep */}
+    else if(f.lock>0 && ["atk","dash","s1","s2","sub"].includes(f.state)) {}
     else if(f.y<0) f.state=(f.vy<0)?"jump":"fall";
     else if(Math.abs(inp.mx)>0.15) f.state="run";
     else f.state="idle";
 
-    // hit windows
     if(f.state==="atk"){
-      const w0 = 0.06 + f.combo*0.01;
-      const w1 = 0.14 + f.combo*0.015;
-      if(!f.didHit && f.t>=w0 && f.t<=w1){
-        if(applyHit(f, def, 1.0, "atk")) f.didHit=true;
-      }
+      const w0=0.06+f.combo*0.01, w1=0.14+f.combo*0.015;
+      if(!f.didHit && f.t>=w0 && f.t<=w1) if(applyHit(f,def,1.0,"atk")) f.didHit=true;
     }
     if(f.state==="s1"){
-      if(!f.didHit && f.t>=0.10 && f.t<=0.20){
-        if(applyHit(f, def, 1.12, "skill")) f.didHit=true;
-      }
+      if(!f.didHit && f.t>=0.10 && f.t<=0.20) if(applyHit(f,def,1.12,"skill")) f.didHit=true;
     }
     if(f.state==="s2"){
-      // skill2: “blink slash” xa hơn
       if(f.t>=0.12 && f.t<0.14){
-        // blink
-        const d = sign(def.x - f.x) || f.face;
-        f.face = d;
+        const d=sign(def.x-f.x)||f.face; f.face=d;
         f.x = def.x - d*220;
         f.invul=Math.max(f.invul,0.12);
         spawnSlash(def.x, def.y-90, d, "skill");
         startFlash(0.22,0.06);
       }
-      if(!f.didHit && f.t>=0.16 && f.t<=0.28){
-        if(applyHit(f, def, 1.20, "skill")) f.didHit=true;
-      }
+      if(!f.didHit && f.t>=0.16 && f.t<=0.28) if(applyHit(f,def,1.20,"skill")) f.didHit=true;
     }
     if(f.state==="sub"){
-      // sub: projectile-like short wave (nhưng vẫn là slash)
-      if(!f.didHit && f.t>=0.08 && f.t<=0.16){
-        if(applyHit(f, def, 0.92, "skill")) f.didHit=true;
-      }
+      if(!f.didHit && f.t>=0.08 && f.t<=0.16) if(applyHit(f,def,0.92,"skill")) f.didHit=true;
     }
     if(f.state==="ult" && f.ult){
-      // ult style: teleport chain assassinate
       if(!f.ult.tele && f.t>=0.12){
-        const d = sign(def.x - f.x) || f.face;
-        f.face=d;
+        const d=sign(def.x-f.x)||f.face; f.face=d;
         f.x = def.x - d*200;
         f.invul=Math.max(f.invul,0.18);
         f.ult.tele=true;
         spawnSlash(def.x, def.y-100, d, "ult");
       }
       while(f.ult.idx < f.ult.hits.length && f.t >= f.ult.hits[f.ult.idx]){
-        const d = sign(def.x - f.x) || f.face;
-        f.face=d;
-        // jitter teleport around target
-        const jitter = (f.ult.idx%2===0)? 26 : -26;
+        const d=sign(def.x-f.x)||f.face; f.face=d;
+        const jitter=(f.ult.idx%2===0)?26:-26;
         f.x = def.x - d*190 + jitter;
         spawnSlash(def.x, def.y-100, d, "ult");
         spawnSparks(def.x, def.y-100, d, "ult");
-        applyHit(f, def, 1.35, "ult");
+        applyHit(f,def,1.35,"ult");
         f.ult.idx++;
       }
-      if(f.t>=0.90 && f.lock<=0){
-        f.ult=null;
-      }
+      if(f.t>=0.90 && f.lock<=0) f.ult=null;
     }
 
     f.t += dt;
@@ -729,7 +623,6 @@
     }
   }
 
-  /* ===================== Rendering ===================== */
   function roundRect(x,y,w,h,r){
     const rr=Math.min(r,w/2,h/2);
     ctx.beginPath();
@@ -742,13 +635,11 @@
   }
 
   function drawBackground(){
-    const w=cv.width,h=cv.height;
+    const w=VIEW.w, h=VIEW.h;
     const g=ctx.createRadialGradient(w*0.5,0,10,w*0.5,0,w*0.9);
     g.addColorStop(0,"rgba(35,60,120,.35)");
     g.addColorStop(1,"rgba(5,7,12,1)");
     ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
-
-    // floor line + fog
     ctx.globalAlpha=0.18;
     ctx.strokeStyle="rgba(255,255,255,.12)";
     ctx.lineWidth=2;
@@ -756,40 +647,15 @@
     ctx.globalAlpha=1;
   }
 
-  function drawPopups(dt){
-    for(let i=popups.length-1;i>=0;i--){
-      const d=popups[i];
-      d.t+=dt;
-      d.y += d.vy*dt;
-      d.vy += 520*dt;
-      const a=d.t/d.life;
-      if(a>=1){ popups.splice(i,1); continue; }
-      const alpha=1-Math.pow(a,1.4);
-      const scale=1+(1-a)*0.16;
-      ctx.save();
-      ctx.globalAlpha=alpha;
-      ctx.translate(d.x,d.y);
-      ctx.scale(scale,scale);
-      ctx.font = (d.crit? "900 34px":"900 28px") + " system-ui,-apple-system,Segoe UI,Roboto,Arial";
-      ctx.fillStyle="rgba(0,0,0,.35)";
-      ctx.fillText(d.text,2,2);
-      ctx.fillStyle = d.crit? "rgba(255,210,120,.95)" : "rgba(255,255,255,.92)";
-      ctx.fillText(d.text,0,0);
-      ctx.restore();
-    }
-  }
-
-  function drawSlashes(dt){
+  function drawFX(dt){
+    // slashes
     for(let i=slashes.length-1;i>=0;i--){
-      const s=slashes[i];
-      s.t+=dt;
+      const s=slashes[i]; s.t+=dt;
       const a=s.t/s.life;
       if(a>=1){ slashes.splice(i,1); continue; }
       const alpha=(1-a)*0.95;
-      const color =
-        s.kind==="ult" ? "rgba(255,220,120,.92)" :
-        s.kind==="skill"? "rgba(180,240,255,.86)" :
-                          "rgba(200,245,255,.82)";
+      const color = s.kind==="ult" ? "rgba(255,220,120,.92)" :
+                    s.kind==="skill"? "rgba(180,240,255,.86)" : "rgba(200,245,255,.82)";
       ctx.save();
       ctx.globalAlpha=alpha;
       ctx.translate(s.x,s.y);
@@ -808,12 +674,9 @@
       ctx.beginPath(); ctx.moveTo(-s.len*0.38,0); ctx.lineTo(s.len*0.48,0); ctx.stroke();
       ctx.restore();
     }
-  }
-
-  function drawSparks(dt){
+    // sparks
     for(let i=sparks.length-1;i>=0;i--){
-      const p=sparks[i];
-      p.t+=dt;
+      const p=sparks[i]; p.t+=dt;
       const a=p.t/p.life;
       if(a>=1){ sparks.splice(i,1); continue; }
       p.x+=p.vx*dt; p.y+=p.vy*dt;
@@ -824,9 +687,29 @@
       ctx.fillRect(p.x,p.y,p.s,p.s);
       ctx.restore();
     }
+    // popups
+    for(let i=popups.length-1;i>=0;i--){
+      const d=popups[i];
+      d.t+=dt;
+      d.y += d.vy*dt;
+      d.vy += 520*dt;
+      const a=d.t/d.life;
+      if(a>=1){ popups.splice(i,1); continue; }
+      const alpha=1-Math.pow(a,1.4);
+      const scale=1+(1-a)*0.16;
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      ctx.translate(d.x,d.y);
+      ctx.scale(scale,scale);
+      ctx.font=(d.crit?"900 34px":"900 28px")+" system-ui,-apple-system,Segoe UI,Roboto,Arial";
+      ctx.fillStyle="rgba(0,0,0,.35)";
+      ctx.fillText(d.text,2,2);
+      ctx.fillStyle=d.crit?"rgba(255,210,120,.95)":"rgba(255,255,255,.92)";
+      ctx.fillText(d.text,0,0);
+      ctx.restore();
+    }
   }
 
-  // Assassin vector model with animation by state
   function drawAssassin(f){
     const s=w2s(f.x,f.y);
     const sx=s.x, sy=s.y;
@@ -841,23 +724,18 @@
     let alpha=1;
     if(f.invul>0 || f.stun>0) alpha=(Math.sin(now()/55)>0)?0.35:1;
 
-    // squash/stretch
     let squ=1, squY=1;
     if(f.state==="run"){ squ=1.05; squY=0.96; }
     if(f.state==="atk"){ squ=1.10; squY=0.92; }
     if(f.state==="s1"||f.state==="s2"||f.state==="sub"){ squ=1.08; squY=0.92; }
     if(f.state==="ult"){ squ=1.14; squY=0.88; }
-    if(f.state==="stun"){ squ=0.98; squY=1.02; }
 
     const t=now()/1000;
     const bob = (f.state==="idle") ? Math.sin(t*3.2)*2.2 :
                 (f.state==="run")  ? Math.sin(t*10.5)*3.2 : 0;
 
-    // colors per side
-    const A = (f.side>0) ? "rgba(60,245,200,.92)" : "rgba(255,100,140,.92)";
-    const B = (f.side>0) ? "rgba(80,170,255,.65)" : "rgba(255,200,120,.55)";
-
-    // sword trail in atk states
+    const A = (f===Left) ? "rgba(60,245,200,.92)" : "rgba(255,100,140,.92)";
+    const B = (f===Left) ? "rgba(80,170,255,.65)" : "rgba(255,200,120,.55)";
     const swing = (f.state==="atk"||f.state==="s1"||f.state==="s2"||f.state==="sub"||f.state==="ult");
     const swingPhase = swing ? clamp(f.t/0.28,0,1) : 0;
 
@@ -867,47 +745,37 @@
     ctx.scale(f.face, 1);
     ctx.scale(squ, squY);
 
-    // glow depending state
     if(f.state==="ult"){ ctx.shadowColor="rgba(255,220,120,.38)"; ctx.shadowBlur=24; }
     else if(f.state==="s1"||f.state==="s2"){ ctx.shadowColor="rgba(180,240,255,.25)"; ctx.shadowBlur=18; }
     else { ctx.shadowColor="rgba(0,0,0,.35)"; ctx.shadowBlur=12; }
 
-    // cloak/body
     const grad=ctx.createLinearGradient(-44,-80,44,20);
     grad.addColorStop(0,A); grad.addColorStop(1,B);
     ctx.fillStyle=grad;
     roundRect(-36,-78,72,118,20); ctx.fill();
 
-    // hood
     ctx.shadowBlur=0;
     ctx.fillStyle="rgba(0,0,0,.18)";
     roundRect(-30,-78,60,42,18); ctx.fill();
 
-    // eyes
     ctx.fillStyle="rgba(255,255,255,.85)";
     ctx.fillRect(-10,-56,7,3);
     ctx.fillRect(3,-56,7,3);
 
-    // arm + blade (simple)
-    const armY = -20;
-    const armX = 28;
+    const armY=-20, armX=28;
     const ang = swing ? (-0.9 + 1.8*swingPhase) : -0.2;
     ctx.save();
     ctx.translate(armX, armY);
     ctx.rotate(ang);
-    // arm
     ctx.fillStyle="rgba(255,255,255,.14)";
     roundRect(-6,-6,26,12,6); ctx.fill();
-    // blade
-    ctx.fillStyle = (f.state==="ult") ? "rgba(255,220,120,.90)" : "rgba(220,245,255,.88)";
+    ctx.fillStyle=(f.state==="ult")?"rgba(255,220,120,.90)":"rgba(220,245,255,.88)";
     roundRect(18,-3,56,6,6); ctx.fill();
-    // blade highlight
     ctx.globalAlpha*=0.65;
     ctx.fillStyle="rgba(255,255,255,.85)";
     roundRect(22,-2,44,2,4); ctx.fill();
     ctx.restore();
 
-    // ult aura
     if(f.state==="ult"){
       ctx.globalAlpha*=0.65;
       ctx.strokeStyle="rgba(255,220,120,.65)";
@@ -918,39 +786,36 @@
       ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(0,-22,52,0,Math.PI*2); ctx.stroke();
     }
-
     ctx.restore();
   }
 
   function updateHUD(){
-    document.getElementById("p1hp").style.transform=`scaleX(${P1.hp/P1.hpMax})`;
-    document.getElementById("p2hp").style.transform=`scaleX(${P2.hp/P2.hpMax})`;
-    document.getElementById("p1en").style.transform=`scaleX(${P1.en/P1.enMax})`;
-    document.getElementById("p2en").style.transform=`scaleX(${P2.en/P2.enMax})`;
+    document.getElementById("Lhp").style.transform=`scaleX(${Left.hp/Left.hpMax})`;
+    document.getElementById("Rhp").style.transform=`scaleX(${Right.hp/Right.hpMax})`;
+    document.getElementById("Len").style.transform=`scaleX(${Left.en/Left.enMax})`;
+    document.getElementById("Ren").style.transform=`scaleX(${Right.en/Right.enMax})`;
   }
 
-  /* ===================== Net (Render + signaling) ===================== */
-  const WS_URL = (location.protocol==="https:"?"wss://":"ws://")+location.host;
-  let ws=null;
-  let pc=null, dc=null;
-  let roomCode="";
-  let myRole="none"; // host/guest
+  /* ================= Net (Render) ================= */
+  const WS_URL=(location.protocol==="https:"?"wss://":"ws://")+location.host;
+  let ws=null, pc=null, dc=null;
+  let roomCode="", myRole="none"; // host/guest
 
-  // Deterministic-ish sync: send input by frame with small delay
   const NET={
     connected:false,
     readyMe:false,
     readyPeer:false,
+    started:false,
     frame:0,
     inputDelay:3,
     myQ:new Map(),
     peerQ:new Map(),
-    lastPeerFrame:-1,
     ping:0,
-    _lastPing:0,
+    _lastPing:0
   };
 
   function wsSend(obj){ if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+  function dcSend(obj){ if(dc && dc.readyState==="open") dc.send(JSON.stringify(obj)); }
 
   async function connectWS(){
     return new Promise((resolve,reject)=>{
@@ -958,22 +823,21 @@
       ws.onopen=()=>resolve();
       ws.onerror=(e)=>reject(e);
       ws.onmessage=async (ev)=>{
-        let msg=null; try{ msg=JSON.parse(ev.data); }catch{ return; }
-
+        let msg=null; try{ msg=JSON.parse(ev.data);}catch{return;}
         if(msg.t==="room"){
           roomCode=msg.code;
           roomOut.value=roomCode;
           hostNote.innerHTML=`Gửi code <b>${roomCode}</b> cho bạn bè.`;
-          setStatus("Room: "+roomCode, true);
+          setStatus("Room: "+roomCode,true);
           return;
         }
         if(msg.t==="joined"){
           roomCode=msg.code;
-          setStatus("Joined: "+roomCode, true);
+          setStatus("Joined: "+roomCode,true);
           return;
         }
         if(msg.t==="peer-joined" && myRole==="host"){
-          setStatus("Peer joined… creating offer", true);
+          setStatus("Peer joined… creating offer",true);
           const offer=await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
           await pc.setLocalDescription(offer);
           wsSend({t:"offer", code:roomCode, sdp:pc.localDescription});
@@ -984,27 +848,26 @@
           const ans=await pc.createAnswer();
           await pc.setLocalDescription(ans);
           wsSend({t:"answer", code:roomCode, sdp:pc.localDescription});
-          setStatus("Answer sent… connecting", true);
+          setStatus("Answer sent…",true);
           return;
         }
         if(msg.t==="answer" && myRole==="host"){
           await pc.setRemoteDescription(msg.sdp);
-          setStatus("Answer received… connecting", true);
+          setStatus("Answer received…",true);
           return;
         }
         if(msg.t==="ice"){
-          try{ await pc.addIceCandidate(msg.candidate); }catch{}
+          try{ await pc.addIceCandidate(msg.candidate);}catch{}
           return;
         }
         if(msg.t==="peer-left"){
-          setStatus("Peer left", false);
+          setStatus("Peer left",false);
           closeAll();
           return;
         }
         if(msg.t==="err"){
-          setStatus("Error: "+msg.err, false);
+          setStatus("Error: "+msg.err,false);
           alert("Lỗi: "+msg.err);
-          return;
         }
       };
     });
@@ -1012,53 +875,18 @@
 
   async function createPC(){
     const _pc=new RTCPeerConnection({
-      iceServers:[
-        {urls:"stun:stun.l.google.com:19302"},
-        {urls:"stun:stun1.l.google.com:19302"},
-      ]
+      iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun1.l.google.com:19302"}]
     });
     _pc.onicecandidate=(ev)=>{
       if(ev.candidate && roomCode) wsSend({t:"ice", code:roomCode, candidate:ev.candidate});
     };
     _pc.oniceconnectionstatechange=()=>{
       const s=_pc.iceConnectionState;
-      if(s==="connected"||s==="completed") setStatus("Connected", true);
-      else if(s==="failed"||s==="disconnected") setStatus("Disconnected", false);
-      else setStatus("ICE: "+s, true);
+      if(s==="connected"||s==="completed") setStatus("Connected",true);
+      else if(s==="failed"||s==="disconnected") setStatus("Disconnected",false);
+      else setStatus("ICE: "+s,true);
     };
     return _pc;
-  }
-
-  function dcSend(obj){
-    if(dc && dc.readyState==="open") dc.send(JSON.stringify(obj));
-  }
-
-  function wireDC(_dc){
-    dc=_dc;
-    dc.onopen=()=>{
-      NET.connected=true;
-      setStatus("Connected (DC open)", true);
-
-      // handshake ready
-      NET.readyMe=true;
-      dcSend({t:"ready"});
-      maybeStartMatch();
-    };
-    dc.onmessage=(ev)=>{
-      let msg=null; try{ msg=JSON.parse(ev.data); }catch{ return; }
-      if(msg.t==="ready"){
-        NET.readyPeer=true;
-        maybeStartMatch();
-      } else if(msg.t==="in"){
-        NET.peerQ.set(msg.f, msg.i);
-        NET.lastPeerFrame=Math.max(NET.lastPeerFrame, msg.f);
-      } else if(msg.t==="ping"){
-        dcSend({t:"pong", ts:msg.ts});
-      } else if(msg.t==="pong"){
-        NET.ping = now() - msg.ts;
-      }
-    };
-    dc.onclose=()=>{ setStatus("Channel closed", false); closeAll(); };
   }
 
   function closeAll(){
@@ -1066,84 +894,131 @@
     try{ pc && pc.close(); }catch{}
     try{ ws && ws.close(); }catch{}
     ws=null; pc=null; dc=null;
+
+    NET.connected=false; NET.readyMe=false; NET.readyPeer=false; NET.started=false;
+    NET.frame=0; NET.myQ.clear(); NET.peerQ.clear();
+
     roomCode=""; myRole="none";
-    NET.connected=false; NET.readyMe=false; NET.readyPeer=false;
-    NET.frame=0; NET.myQ.clear(); NET.peerQ.clear(); NET.lastPeerFrame=-1;
     menu.style.display="flex";
     hud.style.display="none";
-    roundInfo.style.display="none";
+    info.style.display="none";
     controls.style.display="none";
     hint.style.display="none";
   }
 
-  /* ===================== Match start ===================== */
-  let RUN=false;
-  function resetMatch(){
-    P1=Fighter(+1);
-    P2=Fighter(-1);
+  function tryLockLandscape(){
+    // only works in some browsers + must be in user gesture (button click)
+    try{
+      if(screen.orientation && screen.orientation.lock){
+        screen.orientation.lock("landscape").catch(()=>{});
+      }
+    }catch{}
+  }
+
+  function wireDC(_dc){
+    dc=_dc;
+    dc.onopen=()=>{
+      NET.connected=true;
+      setStatus("Connected (DC open)",true);
+
+      NET.readyMe=true;
+      dcSend({t:"ready"});
+      maybeStart();
+    };
+    dc.onmessage=(ev)=>{
+      let msg=null; try{ msg=JSON.parse(ev.data);}catch{return;}
+      if(msg.t==="ready"){
+        NET.readyPeer=true;
+        maybeStart();
+        return;
+      }
+      if(msg.t==="start"){
+        // host sent seed -> both start same HP/DMG
+        startMatch(msg.seed>>>0);
+        return;
+      }
+      if(msg.t==="in"){
+        NET.peerQ.set(msg.f, msg.i);
+        return;
+      }
+      if(msg.t==="ping"){ dcSend({t:"pong", ts:msg.ts}); return; }
+      if(msg.t==="pong"){ NET.ping = now()-msg.ts; return; }
+    };
+    dc.onclose=()=>{ setStatus("Channel closed",false); closeAll(); };
+  }
+
+  /* ================= Start Match (host decides seed) ================= */
+  function maybeStart(){
+    if(!NET.readyMe || !NET.readyPeer) return;
+    if(NET.started) return;
+
+    // hide menu, show controls/hud
+    menu.style.display="none";
+    hud.style.display="flex";
+    info.style.display="block";
+    hint.style.display=("ontouchstart" in window)?"block":"none";
+    controls.style.display=("ontouchstart" in window)?"block":"none";
+
+    if(myRole==="host"){
+      // host picks seed
+      const seed = (Math.random()*0xFFFFFFFF)>>>0;
+      dcSend({t:"start", seed});
+      startMatch(seed);
+    }
+  }
+
+  function startMatch(seed){
+    NET.started=true;
+    NET.frame=0; NET.myQ.clear(); NET.peerQ.clear();
+    RNG = mulberry32(seed);
+
+    // left/right fighters (world-consistent)
+    Left = Fighter(-1);
+    Right= Fighter(+1);
+
+    // names depend on roles but both machines see same left/right
+    Lname.textContent="HOST";
+    Rname.textContent="GUEST";
+
     WORLD.camX=0;
     popups.length=0; slashes.length=0; sparks.length=0;
-    RUN=true;
-
-    hud.style.display="flex";
-    roundInfo.style.display="block";
-    roundInfo.textContent="FIGHT! • ping: 0ms";
-    hint.style.display=("ontouchstart" in window) ? "block" : "none";
-
-    controls.style.display=("ontouchstart" in window) ? "block" : "none";
+    info.textContent="FIGHT • ping: 0ms";
+    updateHUD();
   }
 
-  function maybeStartMatch(){
-    if(!NET.readyMe || !NET.readyPeer) return;
-    // start game
-    menu.style.display="none";
-    resetMatch();
-  }
-
-  /* ===================== Buttons ===================== */
+  /* ================= Buttons ================= */
   document.getElementById("btnHost").onclick=async ()=>{
+    tryLockLandscape();
     closeAll();
-    setStatus("Connecting server…", true);
+    setStatus("Connecting server…",true);
     await connectWS();
-
     myRole="host";
     pc=await createPC();
     const _dc=pc.createDataChannel("game",{ordered:true});
     wireDC(_dc);
-
     wsSend({t:"host"});
-    setStatus("Creating room…", true);
+    setStatus("Creating room…",true);
   };
-
   document.getElementById("btnJoin").onclick=async ()=>{
+    tryLockLandscape();
     const code=roomIn.value.trim().toUpperCase();
     if(code.length!==6){ alert("Room code phải đủ 6 ký tự."); return; }
-
     closeAll();
-    setStatus("Connecting server…", true);
+    setStatus("Connecting server…",true);
     await connectWS();
-
     myRole="guest";
     pc=await createPC();
     pc.ondatachannel=(ev)=>wireDC(ev.channel);
-
     wsSend({t:"join", code});
-    setStatus("Joining…", true);
+    setStatus("Joining…",true);
   };
-
   document.getElementById("btnCopy").onclick=()=>copyText(roomOut.value||"");
-  document.getElementById("btnLeaveH").onclick=()=>{
-    if(ws && roomCode) wsSend({t:"leave", code:roomCode});
-    closeAll();
-  };
-  document.getElementById("btnLeaveJ").onclick=()=>{
-    if(ws && roomCode) wsSend({t:"leave", code:roomCode});
-    closeAll();
-  };
+  document.getElementById("btnLeaveH").onclick=()=>{ if(ws && roomCode) wsSend({t:"leave", code:roomCode}); closeAll(); };
+  document.getElementById("btnLeaveJ").onclick=()=>{ if(ws && roomCode) wsSend({t:"leave", code:roomCode}); closeAll(); };
 
-  /* ===================== Simulation tick (online sync) ===================== */
-  function stepSim(dt, in1, in2){
-    WORLD.camX = lerp(WORLD.camX, (P1.x+P2.x)/2, 0.08);
+  /* ================= Simulation ================= */
+  function stepSim(dt, inLeft, inRight){
+    WORLD.camX = lerp(WORLD.camX, (Left.x+Right.x)/2, 0.08);
 
     if(WORLD.shakeT>0){ WORLD.shakeT=Math.max(0,WORLD.shakeT-dt); WORLD.shake=lerp(WORLD.shake,0,0.18); }
     else WORLD.shake=lerp(WORLD.shake,0,0.10);
@@ -1151,103 +1026,92 @@
     if(WORLD.flashT>0){ WORLD.flashT=Math.max(0,WORLD.flashT-dt); WORLD.flash=lerp(WORLD.flash,0,0.22); }
     else WORLD.flash=lerp(WORLD.flash,0,0.18);
 
-    // energy regen
-    P1.en = clamp(P1.en + dt*10, 0, 100);
-    P2.en = clamp(P2.en + dt*10, 0, 100);
+    Left.en = clamp(Left.en + dt*10, 0, 100);
+    Right.en= clamp(Right.en+ dt*10, 0, 100);
 
-    updateFighter(P1,P2,dt,in1,"p1");
-    updateFighter(P2,P1,dt,in2,"p2");
-    separate(P1,P2,dt);
+    updateFighter(Left, Right, dt, inLeft, "L");
+    updateFighter(Right,Left, dt, inRight,"R");
+    separate(Left,Right,dt);
 
     updateHUD();
-    roundInfo.textContent = `FIGHT • ping: ${Math.round(NET.ping)}ms • HP: ${P1.hp}/${P1.hpMax} vs ${P2.hp}/${P2.hpMax}`;
+    info.textContent = `FIGHT • ping: ${Math.round(NET.ping)}ms • HP: ${Left.hp}/${Left.hpMax} vs ${Right.hp}/${Right.hpMax}`;
   }
 
-  /* ===================== Main loop ===================== */
+  /* ================= Main loop ================= */
   let lastT=now();
-  function frameLoop(t){
-    requestAnimationFrame(frameLoop);
-
-    // render background always
+  function loop(t){
+    requestAnimationFrame(loop);
     const dt=Math.min(0.033, Math.max(0.001, (t-lastT)/1000));
     lastT=t;
 
-    // camera shake offset
-    const ox = (WORLD.shakeT>0)? (Math.random()-0.5)*WORLD.shake : 0;
-    const oy = (WORLD.shakeT>0)? (Math.random()-0.5)*WORLD.shake : 0;
-
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,cv.width,cv.height);
-    ctx.save();
+    beginView();
+    const ox=(WORLD.shakeT>0)?(Math.random()-0.5)*WORLD.shake:0;
+    const oy=(WORLD.shakeT>0)?(Math.random()-0.5)*WORLD.shake:0;
     ctx.translate(ox,oy);
 
     drawBackground();
 
-    // if running: simulate + draw
-    if(RUN){
-      // Online: send input with delay, read queues
-      if(NET.connected && dc && dc.readyState==="open"){
-        const myIn=readLocalInput();
-        const sendF=NET.frame + NET.inputDelay;
-        NET.myQ.set(sendF, myIn);
-        dcSend({t:"in", f:sendF, i:myIn});
+    if(NET.started && NET.connected && dc && dc.readyState==="open"){
+      const myIn=readLocalInput();
+      const sendF = NET.frame + NET.inputDelay;
+      NET.myQ.set(sendF, myIn);
+      dcSend({t:"in", f:sendF, i:myIn});
 
-        // ping
-        if(t - NET._lastPing > 1000){
-          NET._lastPing = t;
-          dcSend({t:"ping", ts:now()});
-        }
-
-        const in1 = NET.myQ.get(NET.frame) || makeInput();
-        const in2 = NET.peerQ.get(NET.frame) || makeInput();
-
-        // simple jitter buffer: if peer behind too much, wait
-        if(NET.frame - NET.lastPeerFrame > 12){
-          // still render only
-        } else {
-          stepSim(dt, in1, in2);
-          // cleanup
-          if(NET.frame>80){
-            NET.myQ.delete(NET.frame-80);
-            NET.peerQ.delete(NET.frame-80);
-          }
-          NET.frame++;
-        }
+      if(t - NET._lastPing > 1000){
+        NET._lastPing = t;
+        dcSend({t:"ping", ts:now()});
       }
+
+      // Map inputs by role:
+      // host controls Left, guest controls Right
+      const my = NET.myQ.get(NET.frame) || makeInput();
+      const peer = NET.peerQ.get(NET.frame) || makeInput();
+
+      const inLeft  = (myRole==="host") ? my   : peer;
+      const inRight = (myRole==="host") ? peer : my;
+
+      // IMPORTANT: do NOT stall if peer missing -> use neutral input
+      stepSim(dt, inLeft, inRight);
+
+      if(NET.frame>80){
+        NET.myQ.delete(NET.frame-80);
+        NET.peerQ.delete(NET.frame-80);
+      }
+      NET.frame++;
     }
 
-    // FX draw
-    drawSlashes(dt);
-    drawSparks(dt);
+    drawFX(dt);
 
-    // fighters
-    if(RUN){
-      drawAssassin(P2);
-      drawAssassin(P1);
+    if(NET.started){
+      drawAssassin(Right);
+      drawAssassin(Left);
     }
 
-    drawPopups(dt);
-
-    // flash overlay
     if(WORLD.flash>0.01){
       ctx.save();
       ctx.globalAlpha=WORLD.flash;
       ctx.fillStyle="#fff";
-      ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillRect(0,0,VIEW.w,VIEW.h);
       ctx.restore();
     }
 
-    ctx.restore();
+    endView();
 
-    // end condition local visual (when someone dead -> reset after 2s)
-    if(RUN && (P1.hp<=0 || P2.hp<=0)){
-      RUN=false;
+    // rematch: host broadcasts new seed if someone dead
+    if(NET.started && (Left?.hp<=0 || Right?.hp<=0)){
+      NET.started=false;
       setTimeout(()=>{
-        if(NET.connected) resetMatch();
-      }, 1600);
+        if(NET.connected && dc && dc.readyState==="open"){
+          if(myRole==="host"){
+            const seed=(Math.random()*0xFFFFFFFF)>>>0;
+            dcSend({t:"start", seed});
+            startMatch(seed);
+          }
+        }
+      }, 1000);
     }
   }
-  requestAnimationFrame(frameLoop);
+  requestAnimationFrame(loop);
 
 })();
 </script>
