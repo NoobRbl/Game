@@ -23,7 +23,6 @@ function updateHUD(state, ping) {
   const net = setupNet();
   const render = setupRender();
 
-  // current authoritative state from server
   const G = {
     seed: 0,
     camX: 0,
@@ -33,22 +32,19 @@ function updateHUD(state, ping) {
     shakeT: 0,
     flash: 0,
     flashT: 0,
-    timeScale: 1,
-    fx: { popups: [], slashes: [], sparks: [], afterImgs: [], smokes: [] },
+    fx: { popups: [], slashes: [], sparks: [] },
     Left: null,
     Right: null
   };
 
-  // lightweight FX from server events (simple, no lag)
   function spawnPopup(wx, wy, text, crit) {
     G.fx.popups.push({ wx, wy: wy - 120, vy: -260, t: 0, life: 0.70, text, crit });
   }
   function spawnSlash(wx, wy, power) {
-    const count = power === "ult" ? 2 : 1; // giảm mạnh số lượng => bớt lag
+    const count = power === "ult" ? 2 : 1;
     for (let i = 0; i < count; i++) {
       G.fx.slashes.push({
         wx, wy: wy - 90,
-        dir: 1,
         kind: power,
         t: 0,
         life: power === "ult" ? 0.18 : 0.14,
@@ -59,7 +55,7 @@ function updateHUD(state, ping) {
     }
   }
   function spawnSparks(wx, wy, power) {
-    const count = power === "ult" ? 10 : 6; // giảm
+    const count = power === "ult" ? 10 : 6;
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const spd = (power === "ult" ? 820 : 620) * (0.5 + Math.random() * 0.6);
@@ -77,34 +73,28 @@ function updateHUD(state, ping) {
 
   net.setHandlers({
     onStart({ seed }) {
-      G.seed = seed;
+      G.seed = seed >>> 0;
       G.fx.popups.length = 0;
       G.fx.slashes.length = 0;
       G.fx.sparks.length = 0;
     },
     onState(msg) {
-      // server sends L/R already; just map into render structure
       const s = msg.s;
       G.Left = s.L;
       G.Right = s.R;
 
-      // simple cam
       G.camX = (G.Left.x + G.Right.x) * 0.5;
 
-      // light cinematic: only when ult state
       const anyUlt = (G.Left.state === "ult" || G.Right.state === "ult");
-      G.zoom = anyUlt ? 1.07 : 1.00;
+      G.zoom = anyUlt ? 1.07 : 1.0;
       G.vignette = anyUlt ? 0.7 : 0.0;
-      G.timeScale = 1;
 
-      // apply events
       for (const e of (msg.events || [])) {
         if (e.t === "hit") {
           spawnPopup(e.x, e.y, String(e.dmg), e.crit);
           spawnSlash(e.x, e.y, e.power);
           spawnSparks(e.x, e.y, e.power);
 
-          // tiny shake only
           G.shakeT = Math.max(G.shakeT, 0.05);
           G.shake = Math.max(G.shake, e.power === "ult" ? 14 : 10);
           G.flashT = Math.max(G.flashT, 0.05);
@@ -126,14 +116,13 @@ function updateHUD(state, ping) {
     const dt = Math.min(0.033, Math.max(0.001, (t - last) / 1000));
     last = t;
 
-    // send inputs at 30hz (nhẹ hơn nhiều)
+    // gửi input 30Hz (nhẹ)
     sendAcc += dt;
     if (sendAcc >= 1 / 30) {
       sendAcc = 0;
       const my = input.readLocalInput();
 
-      // IMPORTANT: actions should be “press” not “hold”
-      // We convert to one-shot using edge detector from input
+      // one-shot actions
       const i = {
         mx: my.mx,
         atk: input.once("atk", my.atk),
@@ -144,11 +133,12 @@ function updateHUD(state, ping) {
         ult: input.once("ult", my.ult),
         sub: input.once("sub", my.sub)
       };
+
       net.sendInput(i);
       net.ping();
     }
 
-    // update local FX timers (client-only)
+    // update fx
     const fx = G.fx;
 
     for (let i = fx.slashes.length - 1; i >= 0; i--) {
@@ -181,5 +171,6 @@ function updateHUD(state, ping) {
 
     render.drawFrame(G, dt);
   }
+
   requestAnimationFrame(loop);
 })();
