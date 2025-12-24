@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Nova Arena – 1 Room Code Join</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05070e;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#fff}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  #menu{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 0%, rgba(90,140,255,.25), rgba(5,7,14,1));
+    pointer-events:auto;
+  }
+  .panel{
+    width:min(920px,94vw);
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 30px 120px rgba(0,0,0,.55);
+    border-radius:22px;
+    padding:18px;
+    backdrop-filter:blur(12px);
+  }
+  .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .logo{font-weight:950;letter-spacing:.3px}
+  .pill{padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.10);font-size:12px;opacity:.9}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .box{
+    padding:14px;border-radius:18px;
+    background:rgba(0,0,0,.18);
+    border:1px solid rgba(255,255,255,.10);
+  }
+  .h{font-weight:900;margin:0 0 10px}
+  .p{margin:0;opacity:.75;font-size:12px;line-height:1.35}
+  input{
+    width:100%;box-sizing:border-box;margin-top:8px;
+    background:rgba(0,0,0,.24);color:rgba(255,255,255,.92);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:14px;outline:none;padding:10px 12px;font-size:14px;
+    font-weight:900;letter-spacing:.8px;text-transform:uppercase;
+  }
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .btn{
+    border:none;border-radius:14px;padding:10px 12px;
+    font-weight:950;letter-spacing:.2px;cursor:pointer;
+    background:rgba(255,255,255,.92);color:#0a0d16;
+  }
+  .btn2{
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:14px;padding:10px 12px;
+    font-weight:900;cursor:pointer;
+    background:rgba(255,255,255,.08);color:rgba(255,255,255,.92);
+  }
+  .small{font-size:12px;opacity:.72;margin-top:8px}
+  .ok{color:rgba(110,255,190,.92)}
+  .bad{color:rgba(255,130,140,.92)}
+  #roomOut{user-select:all}
+  #hint{position:fixed;left:0;right:0;bottom:8px;text-align:center;font-size:12px;color:rgba(255,255,255,.45);pointer-events:none;display:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="menu">
+  <div class="panel">
+    <div class="top">
+      <div class="logo">NOVA ARENA • 1 CODE ONLINE</div>
+      <div class="pill" id="status">Offline</div>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <div class="h">HOST</div>
+        <p class="p">Bấm <b>Host</b> để tạo phòng. Sẽ hiện <b>ROOM CODE</b> cho bạn gửi bạn bè.</p>
+
+        <div class="row">
+          <button class="btn2" id="btnHost">Host</button>
+          <button class="btn2" id="btnCopy">Copy Code</button>
+          <button class="btn2" id="btnLeaveH">Leave</button>
+        </div>
+
+        <div class="small">ROOM CODE:</div>
+        <input id="roomOut" readonly placeholder="Chưa có code..." />
+        <div class="small" id="hostNote"></div>
+      </div>
+
+      <div class="box">
+        <div class="h">JOIN</div>
+        <p class="p">Nhập <b>ROOM CODE</b> từ Host → bấm <b>Join</b> (tự vào game).</p>
+
+        <div class="small">Room Code:</div>
+        <input id="roomIn" placeholder="VD: A3K9QZ" maxlength="6" />
+
+        <div class="row">
+          <button class="btn" id="btnJoin">Join</button>
+          <button class="btn2" id="btnLeaveJ">Leave</button>
+        </div>
+
+        <div class="small">
+          Nếu bạn host public: cần deploy server.js (Render/Fly/VPS). Nếu chạy local: bạn bè phải vào cùng IP public.
+        </div>
+      </div>
+    </div>
+
+    <div class="small">
+      Khi <span class="ok">Connected</span> sẽ tự bắt đầu match.
+    </div>
+  </div>
+</div>
+
+<div id="hint">Connected! Starting match…</div>
+
+<script>
+(() => {
+  /* ================= Canvas bg ================= */
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  function resize(){
+    const dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
+    cv.width=Math.floor(innerWidth*dpr);
+    cv.height=Math.floor(innerHeight*dpr);
+  }
+  addEventListener("resize", resize, {passive:true});
+  resize();
+  function drawBg(){
+    const w=cv.width,h=cv.height;
+    const g=ctx.createRadialGradient(w*0.5,0,10,w*0.5,0,w*0.9);
+    g.addColorStop(0,"rgba(35,60,120,.35)");
+    g.addColorStop(1,"rgba(5,7,12,1)");
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+  (function loop(){ drawBg(); requestAnimationFrame(loop); })();
+
+  /* ================= UI ================= */
+  const status = document.getElementById("status");
+  const hint = document.getElementById("hint");
+  const menu = document.getElementById("menu");
+  const hostNote = document.getElementById("hostNote");
+
+  const roomOut = document.getElementById("roomOut");
+  const roomIn  = document.getElementById("roomIn");
+
+  const btnHost = document.getElementById("btnHost");
+  const btnCopy = document.getElementById("btnCopy");
+  const btnLeaveH = document.getElementById("btnLeaveH");
+  const btnJoin = document.getElementById("btnJoin");
+  const btnLeaveJ = document.getElementById("btnLeaveJ");
+
+  function setStatus(text, ok=true){
+    status.textContent = text;
+    status.className = "pill " + (ok ? "ok":"bad");
+  }
+  setStatus("Offline", true);
+
+  async function copyText(text){
+    try{ await navigator.clipboard.writeText(text); }
+    catch{
+      const t=document.createElement("textarea");
+      t.value=text; document.body.appendChild(t);
+      t.select(); document.execCommand("copy"); t.remove();
+    }
+  }
+
+  /* ================= Signaling WS =================
+     - Server is the same origin by default
+  */
+  const WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+  let ws=null;
+
+  function wsSend(obj){
+    if(ws && ws.readyState===1) ws.send(JSON.stringify(obj));
+  }
+
+  /* ================= WebRTC ================= */
+  let pc=null, dc=null;
+  let myRole="none"; // host | guest
+  let roomCode="";
+
+  function closeAll(){
+    try{ dc && dc.close(); }catch{}
+    try{ pc && pc.close(); }catch{}
+    dc=null; pc=null;
+    if(ws){ try{ ws.close(); }catch{} }
+    ws=null;
+    myRole="none"; roomCode="";
+    roomOut.value="";
+    hostNote.textContent="";
+    hint.style.display="none";
+    menu.style.display="flex";
+    setStatus("Offline", true);
+  }
+
+  async function createPC(){
+    const _pc = new RTCPeerConnection({
+      iceServers:[
+        {urls:"stun:stun.l.google.com:19302"},
+        {urls:"stun:stun1.l.google.com:19302"},
+      ]
+    });
+
+    _pc.oniceconnectionstatechange = ()=>{
+      const s=_pc.iceConnectionState;
+      if(s==="connected"||s==="completed"){
+        setStatus("Connected", true);
+      } else if(s==="failed"||s==="disconnected"){
+        setStatus("Disconnected", false);
+      } else {
+        setStatus("ICE: "+s, true);
+      }
+    };
+
+    _pc.onicecandidate = (ev)=>{
+      if(ev.candidate && roomCode){
+        wsSend({t:"ice", code:roomCode, candidate: ev.candidate});
+      }
+    };
+
+    return _pc;
+  }
+
+  function wireDC(_dc){
+    dc=_dc;
+    dc.onopen=()=>{
+      setStatus("Connected", true);
+      startGameOnline(myRole==="host");
+    };
+    dc.onmessage=(e)=>{
+      // TODO: sync input/game state ở đây (để combat online thật)
+      // console.log("msg", e.data);
+    };
+    dc.onclose=()=>setStatus("Channel closed", false);
+  }
+
+  async function connectWS(){
+    return new Promise((resolve,reject)=>{
+      ws = new WebSocket(WS_URL);
+      ws.onopen=()=>resolve();
+      ws.onerror=(e)=>reject(e);
+      ws.onmessage=async (ev)=>{
+        let msg=null;
+        try{ msg=JSON.parse(ev.data); }catch{ return; }
+
+        if(msg.t==="room"){
+          roomCode = msg.code;
+          roomOut.value = roomCode;
+          hostNote.innerHTML = `Gửi code <b>${roomCode}</b> cho bạn bè.`;
+          setStatus("Room created: "+roomCode, true);
+          return;
+        }
+
+        if(msg.t==="joined"){
+          roomCode = msg.code;
+          setStatus("Joined: "+roomCode, true);
+          return;
+        }
+
+        if(msg.t==="peer-joined" && myRole==="host"){
+          setStatus("Peer joined. Creating offer…", true);
+          // create offer now
+          const offer = await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
+          await pc.setLocalDescription(offer);
+          wsSend({t:"offer", code:roomCode, sdp: pc.localDescription});
+          return;
+        }
+
+        if(msg.t==="offer" && myRole==="guest"){
+          await pc.setRemoteDescription(msg.sdp);
+          const ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          wsSend({t:"answer", code:roomCode, sdp: pc.localDescription});
+          setStatus("Answer sent. Connecting…", true);
+          return;
+        }
+
+        if(msg.t==="answer" && myRole==="host"){
+          await pc.setRemoteDescription(msg.sdp);
+          setStatus("Answer received. Connecting…", true);
+          return;
+        }
+
+        if(msg.t==="ice"){
+          try{ await pc.addIceCandidate(msg.candidate); }catch{}
+          return;
+        }
+
+        if(msg.t==="peer-left"){
+          setStatus("Peer left", false);
+          closeAll();
+          return;
+        }
+
+        if(msg.t==="err"){
+          setStatus("Error: "+msg.err, false);
+          alert("Lỗi: "+msg.err);
+          return;
+        }
+      };
+    });
+  }
+
+  /* ================= Buttons ================= */
+  btnHost.onclick = async ()=>{
+    closeAll();
+    setStatus("Connecting server…", true);
+    await connectWS();
+
+    myRole="host";
+    pc = await createPC();
+    const _dc = pc.createDataChannel("game", {ordered:true});
+    wireDC(_dc);
+
+    wsSend({t:"host"});
+    setStatus("Creating room…", true);
+  };
+
+  btnJoin.onclick = async ()=>{
+    const code = roomIn.value.trim().toUpperCase();
+    if(code.length!==6){ alert("Room code phải đủ 6 ký tự."); return; }
+
+    closeAll();
+    setStatus("Connecting server…", true);
+    await connectWS();
+
+    myRole="guest";
+    pc = await createPC();
+    pc.ondatachannel = (ev)=>wireDC(ev.channel);
+
+    wsSend({t:"join", code});
+    setStatus("Joining…", true);
+  };
+
+  btnCopy.onclick = ()=>copyText(roomOut.value||"");
+
+  btnLeaveH.onclick = ()=>{
+    if(ws && roomCode) wsSend({t:"leave", code:roomCode});
+    closeAll();
+  };
+  btnLeaveJ.onclick = ()=>{
+    if(ws && roomCode) wsSend({t:"leave", code:roomCode});
+    closeAll();
+  };
+
+  /* ================= Start Game ================= */
+  function startGameOnline(isHost){
+    hint.style.display="block";
+    menu.style.display="none";
+
+    // TẠM: hiển thị vai trò
+    // Bạn sẽ thay phần này bằng loop game + input sync thật (gửi input qua dc).
+    console.log("Game started. Host?", isHost);
+
+    // Ví dụ gửi ping:
+    if(dc && dc.readyState==="open"){
+      dc.send(JSON.stringify({t:"hello", host:isHost, at:Date.now()}));
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
