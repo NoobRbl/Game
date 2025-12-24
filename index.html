@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>Nova Arena – Online 1 Code (16:9)</title>
+<title>Nova Arena – Online 1 Code (16:9) + Cinematic</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#fff}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
@@ -114,7 +114,7 @@
 <div id="menu">
   <div class="panel">
     <div class="top">
-      <div class="logo">NOVA ARENA • ONLINE 1 CODE • 16:9</div>
+      <div class="logo">NOVA ARENA • ONLINE 1 CODE • 16:9 • CINEMATIC</div>
       <div class="pill" id="status">Offline</div>
     </div>
 
@@ -148,7 +148,7 @@
     </div>
 
     <div class="small">
-      Khi <span class="ok">Connected</span> xong, host phát “seed” → 2 bên tạo HP/Damage giống nhau → match bắt đầu.
+      Khi <span class="ok">Connected</span> xong, host phát seed → 2 bên HP/Dame giống nhau → match bắt đầu.
     </div>
   </div>
 </div>
@@ -225,6 +225,29 @@
   addEventListener("resize", resize, {passive:true});
   resize();
 
+  /* ================= World ================= */
+  const WORLD={
+    floorRel:0.79,
+    grav:2600,
+    camX:0,
+    shake:0, shakeT:0,
+    flash:0, flashT:0,
+
+    // cinematic
+    zoom: 1,
+    zoomTarget: 1,
+    timeScale: 1,
+    vignette: 0,
+    vignetteTarget: 0,
+  };
+
+  const floorY=()=>VIEW.h*WORLD.floorRel;
+  function w2s(wx,wy){
+    return {x: VIEW.w/2 + (wx - WORLD.camX), y: floorY() + wy};
+  }
+  function startShake(d,p){ WORLD.shakeT=Math.max(WORLD.shakeT,d); WORLD.shake=Math.max(WORLD.shake,p); }
+  function startFlash(i,d){ WORLD.flashT=Math.max(WORLD.flashT,d); WORLD.flash=Math.max(WORLD.flash,i); }
+
   function beginView(){
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,cv.width,cv.height);
@@ -236,7 +259,12 @@
     // draw game area
     ctx.save();
     ctx.translate(VIEW.x, VIEW.y);
-    // everything below uses VIEW.w/h coordinates
+
+    // cinematic zoom about center
+    const z = WORLD.zoom || 1;
+    ctx.translate(VIEW.w/2, VIEW.h/2);
+    ctx.scale(z, z);
+    ctx.translate(-VIEW.w/2, -VIEW.h/2);
   }
   function endView(){ ctx.restore(); }
 
@@ -250,7 +278,6 @@
   const roomIn=document.getElementById("roomIn");
   const hint=document.getElementById("hint");
   const controls=document.getElementById("controls");
-
   const Lname=document.getElementById("Lname");
   const Rname=document.getElementById("Rname");
 
@@ -321,7 +348,6 @@
   })();
 
   function makeInput(){ return {mx:0, atk:false, jump:false, dash:false, s1:false, s2:false, ult:false, sub:false}; }
-
   function edgeTracker(){ const s={}; return (k,down)=>{ if(down && !s[k]){s[k]=true; return true;} if(!down) s[k]=false; return false; }; }
   const once=edgeTracker();
 
@@ -343,22 +369,7 @@
     return inp;
   }
 
-  /* ================= Game ================= */
-  const WORLD={
-    floorRel:0.79,
-    grav:2600,
-    camX:0,
-    shake:0, shakeT:0,
-    flash:0, flashT:0,
-  };
-  const floorY=()=>VIEW.h*WORLD.floorRel;
-  function w2s(wx,wy){
-    return {x: VIEW.w/2 + (wx - WORLD.camX), y: floorY() + wy};
-  }
-  function startShake(d,p){ WORLD.shakeT=Math.max(WORLD.shakeT,d); WORLD.shake=Math.max(WORLD.shake,p); }
-  function startFlash(i,d){ WORLD.flashT=Math.max(WORLD.flashT,d); WORLD.flash=Math.max(WORLD.flash,i); }
-
-  // HP random 20109-36098; Damage normal 271-399; Crit 400-418 15%
+  /* ================= Combat random (seeded) ================= */
   function rollHP(){ return randi(20109,36098); }
   function rollDamage(){
     const crit = (RNG() < 0.15);
@@ -369,10 +380,10 @@
   function Fighter(side){
     const hp = rollHP();
     return {
-      side, // -1 left, +1 right in WORLD coords? (we use face separately)
+      side,
       x: side<0 ? -280 : 280,
       y: 0, vx: 0, vy: 0,
-      face: side<0 ? 1 : -1, // left faces right; right faces left
+      face: side<0 ? 1 : -1,
       hp, hpMax: hp,
       en: 100, enMax: 100,
       state:"idle", t:0,
@@ -388,7 +399,9 @@
 
   let Left=null, Right=null;
 
-  const popups=[], slashes=[], sparks=[];
+  /* ================= FX ================= */
+  const popups=[], slashes=[], sparks=[], afterImgs=[], smokes=[];
+
   function spawnPopup(wx,wy,text,crit){
     const s=w2s(wx,wy);
     popups.push({x:s.x,y:s.y, vy:-320, t:0, life:0.85, text, crit});
@@ -420,6 +433,32 @@
         vy:Math.sin(a)*spd - (power==="ult"?320:220),
         t:0, life: power==="ult"?0.55:0.42,
         s:2+Math.random()*2,
+      });
+    }
+  }
+
+  function spawnAfterImage(f, strength){
+    const s=w2s(f.x,f.y);
+    afterImgs.push({
+      x:s.x, y:s.y-108,
+      face:f.face,
+      t:0, life:0.18,
+      a: clamp(strength, 0.25, 0.9)
+    });
+  }
+  function spawnSmoke(wx, wy, power){
+    const s=w2s(wx,wy);
+    const n = power==="big"?18:10;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*Math.PI*2;
+      const spd=(power==="big"?820:520)*(0.4+Math.random()*0.8);
+      smokes.push({
+        x:s.x, y:s.y,
+        vx:Math.cos(a)*spd,
+        vy:Math.sin(a)*spd - (power==="big"?360:240),
+        t:0, life: power==="big"?0.55:0.38,
+        r: 12 + Math.random()*18,
+        grow: (power==="big"?64:44)*(0.7+Math.random()*0.6)
       });
     }
   }
@@ -567,43 +606,95 @@
     else if(Math.abs(inp.mx)>0.15) f.state="run";
     else f.state="idle";
 
+    // ATK hit window
     if(f.state==="atk"){
       const w0=0.06+f.combo*0.01, w1=0.14+f.combo*0.015;
       if(!f.didHit && f.t>=w0 && f.t<=w1) if(applyHit(f,def,1.0,"atk")) f.didHit=true;
     }
+
+    // S1 (U) cross slash + afterimage
     if(f.state==="s1"){
-      if(!f.didHit && f.t>=0.10 && f.t<=0.20) if(applyHit(f,def,1.12,"skill")) f.didHit=true;
+      if(f.t < 0.22) spawnAfterImage(f, 0.55);
+
+      if(!f.didHit && f.t>=0.10 && f.t<=0.16){
+        if(applyHit(f,def,1.10,"skill")) f.didHit=true;
+      }
+      if(f.t>=0.18 && f.t<=0.24){
+        applyHit(f,def,0.92,"skill");
+        spawnSlash(def.x, def.y-92, f.face, "skill");
+        spawnSparks(def.x, def.y-94, f.face, "skill");
+      }
     }
+
+    // S2 (I) shadow step/backstab + smoke + big slash
     if(f.state==="s2"){
-      if(f.t>=0.12 && f.t<0.14){
+      if(f.t>=0.10 && f.t<0.12){
         const d=sign(def.x-f.x)||f.face; f.face=d;
-        f.x = def.x - d*220;
-        f.invul=Math.max(f.invul,0.12);
-        spawnSlash(def.x, def.y-90, d, "skill");
-        startFlash(0.22,0.06);
+        spawnSmoke(f.x, f.y-40, "small");
+        f.x = def.x - d*240;
+        f.invul=Math.max(f.invul,0.14);
+        spawnSmoke(f.x, f.y-40, "big");
+
+        startFlash(0.28,0.06);
+        startShake(0.06,16);
+        spawnSlash(def.x, def.y-98, d, "ult");
       }
-      if(!f.didHit && f.t>=0.16 && f.t<=0.28) if(applyHit(f,def,1.20,"skill")) f.didHit=true;
+      if(!f.didHit && f.t>=0.14 && f.t<=0.30){
+        if(applyHit(f,def,1.25,"skill")) f.didHit=true;
+      }
     }
+
+    // SUB (P) feint/parry blink
     if(f.state==="sub"){
-      if(!f.didHit && f.t>=0.08 && f.t<=0.16) if(applyHit(f,def,0.92,"skill")) f.didHit=true;
-    }
-    if(f.state==="ult" && f.ult){
-      if(!f.ult.tele && f.t>=0.12){
-        const d=sign(def.x-f.x)||f.face; f.face=d;
-        f.x = def.x - d*200;
-        f.invul=Math.max(f.invul,0.18);
-        f.ult.tele=true;
-        spawnSlash(def.x, def.y-100, d, "ult");
+      if(f.t<0.12) spawnAfterImage(f, 0.45);
+
+      if(f.t>=0.06 && f.t<0.08){
+        f.x += f.face*90;
+        spawnSmoke(f.x, f.y-40, "small");
       }
+      if(!f.didHit && f.t>=0.08 && f.t<=0.16){
+        if(applyHit(f,def,0.88,"skill")) f.didHit=true;
+      }
+    }
+
+    // ULT cinematic multi slash
+    if(f.state==="ult" && f.ult){
+      if(f.t < 0.75) spawnAfterImage(f, 0.85);
+
+      if(!f.ult.tele && f.t>=0.10){
+        const d=sign(def.x-f.x)||f.face; f.face=d;
+
+        spawnSmoke(def.x - d*220, def.y-40, "big");
+        startFlash(0.55,0.08);
+        startShake(0.08,22);
+
+        f.x = def.x - d*210;
+        f.invul=Math.max(f.invul,0.22);
+        f.ult.tele=true;
+
+        spawnSlash(def.x, def.y-110, d, "ult");
+        spawnSparks(def.x, def.y-110, d, "ult");
+      }
+
       while(f.ult.idx < f.ult.hits.length && f.t >= f.ult.hits[f.ult.idx]){
         const d=sign(def.x-f.x)||f.face; f.face=d;
-        const jitter=(f.ult.idx%2===0)?26:-26;
-        f.x = def.x - d*190 + jitter;
-        spawnSlash(def.x, def.y-100, d, "ult");
-        spawnSparks(def.x, def.y-100, d, "ult");
-        applyHit(f,def,1.35,"ult");
+        const jitter=(f.ult.idx%2===0)?36:-36;
+
+        f.x = def.x - d*200 + jitter;
+
+        spawnSlash(def.x, def.y-112, d, "ult");
+        spawnSlash(def.x, def.y-96, d, "ult");
+        spawnSparks(def.x, def.y-110, d, "ult");
+        spawnSmoke(def.x, def.y-40, "small");
+
+        applyHit(f,def,1.45,"ult");
+
+        startFlash(0.38,0.05);
+        startShake(0.06,20);
+
         f.ult.idx++;
       }
+
       if(f.t>=0.90 && f.lock<=0) f.ult=null;
     }
 
@@ -645,6 +736,23 @@
     ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(0,floorY()+1); ctx.lineTo(w,floorY()+1); ctx.stroke();
     ctx.globalAlpha=1;
+  }
+
+  function drawCinematicOverlay(){
+    const v = WORLD.vignette || 0;
+    if(v>0.01){
+      const g = ctx.createRadialGradient(VIEW.w/2, VIEW.h/2, VIEW.h*0.15, VIEW.w/2, VIEW.h/2, VIEW.h*0.72);
+      g.addColorStop(0, `rgba(0,0,0,0)`);
+      g.addColorStop(1, `rgba(0,0,0,${0.65*v})`);
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,VIEW.w,VIEW.h);
+    }
+    if(v>0.08){
+      const bar = Math.floor( lerp(0, VIEW.h*0.08, v) );
+      ctx.fillStyle="rgba(0,0,0,.85)";
+      ctx.fillRect(0,0,VIEW.w,bar);
+      ctx.fillRect(0,VIEW.h-bar,VIEW.w,bar);
+    }
   }
 
   function drawFX(dt){
@@ -706,6 +814,43 @@
       ctx.fillText(d.text,2,2);
       ctx.fillStyle=d.crit?"rgba(255,210,120,.95)":"rgba(255,255,255,.92)";
       ctx.fillText(d.text,0,0);
+      ctx.restore();
+    }
+
+    // afterimages
+    for(let i=afterImgs.length-1;i>=0;i--){
+      const aimg=afterImgs[i]; aimg.t+=dt;
+      const k=aimg.t/aimg.life;
+      if(k>=1){ afterImgs.splice(i,1); continue; }
+      const alpha=(1-k)*aimg.a;
+
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      ctx.translate(aimg.x, aimg.y);
+      ctx.scale(aimg.face, 1);
+      ctx.filter="blur(0.4px)";
+      ctx.fillStyle="rgba(200,245,255,.55)";
+      roundRect(-34,-78,68,118,20); ctx.fill();
+      ctx.filter="none";
+      ctx.restore();
+    }
+
+    // smoke
+    for(let i=smokes.length-1;i>=0;i--){
+      const p=smokes[i]; p.t+=dt;
+      const k=p.t/p.life;
+      if(k>=1){ smokes.splice(i,1); continue; }
+      p.x += p.vx*dt; p.y += p.vy*dt;
+      p.vy += 720*dt; p.vx *= 0.98;
+
+      const r = p.r + p.grow*k;
+      const alpha = (1-k)*0.20;
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      ctx.fillStyle="rgba(255,255,255,.85)";
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,r,0,Math.PI*2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -799,7 +944,7 @@
   /* ================= Net (Render) ================= */
   const WS_URL=(location.protocol==="https:"?"wss://":"ws://")+location.host;
   let ws=null, pc=null, dc=null;
-  let roomCode="", myRole="none"; // host/guest
+  let roomCode="", myRole="none";
 
   const NET={
     connected:false,
@@ -831,11 +976,7 @@
           setStatus("Room: "+roomCode,true);
           return;
         }
-        if(msg.t==="joined"){
-          roomCode=msg.code;
-          setStatus("Joined: "+roomCode,true);
-          return;
-        }
+        if(msg.t==="joined"){ roomCode=msg.code; setStatus("Joined: "+roomCode,true); return; }
         if(msg.t==="peer-joined" && myRole==="host"){
           setStatus("Peer joined… creating offer",true);
           const offer=await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
@@ -856,19 +997,9 @@
           setStatus("Answer received…",true);
           return;
         }
-        if(msg.t==="ice"){
-          try{ await pc.addIceCandidate(msg.candidate);}catch{}
-          return;
-        }
-        if(msg.t==="peer-left"){
-          setStatus("Peer left",false);
-          closeAll();
-          return;
-        }
-        if(msg.t==="err"){
-          setStatus("Error: "+msg.err,false);
-          alert("Lỗi: "+msg.err);
-        }
+        if(msg.t==="ice"){ try{ await pc.addIceCandidate(msg.candidate);}catch{} return; }
+        if(msg.t==="peer-left"){ setStatus("Peer left",false); closeAll(); return; }
+        if(msg.t==="err"){ setStatus("Error: "+msg.err,false); alert("Lỗi: "+msg.err); }
       };
     });
   }
@@ -907,7 +1038,6 @@
   }
 
   function tryLockLandscape(){
-    // only works in some browsers + must be in user gesture (button click)
     try{
       if(screen.orientation && screen.orientation.lock){
         screen.orientation.lock("landscape").catch(()=>{});
@@ -927,32 +1057,19 @@
     };
     dc.onmessage=(ev)=>{
       let msg=null; try{ msg=JSON.parse(ev.data);}catch{return;}
-      if(msg.t==="ready"){
-        NET.readyPeer=true;
-        maybeStart();
-        return;
-      }
-      if(msg.t==="start"){
-        // host sent seed -> both start same HP/DMG
-        startMatch(msg.seed>>>0);
-        return;
-      }
-      if(msg.t==="in"){
-        NET.peerQ.set(msg.f, msg.i);
-        return;
-      }
+      if(msg.t==="ready"){ NET.readyPeer=true; maybeStart(); return; }
+      if(msg.t==="start"){ startMatch(msg.seed>>>0); return; }
+      if(msg.t==="in"){ NET.peerQ.set(msg.f, msg.i); return; }
       if(msg.t==="ping"){ dcSend({t:"pong", ts:msg.ts}); return; }
       if(msg.t==="pong"){ NET.ping = now()-msg.ts; return; }
     };
     dc.onclose=()=>{ setStatus("Channel closed",false); closeAll(); };
   }
 
-  /* ================= Start Match (host decides seed) ================= */
   function maybeStart(){
     if(!NET.readyMe || !NET.readyPeer) return;
     if(NET.started) return;
 
-    // hide menu, show controls/hud
     menu.style.display="none";
     hud.style.display="flex";
     info.style.display="block";
@@ -960,7 +1077,6 @@
     controls.style.display=("ontouchstart" in window)?"block":"none";
 
     if(myRole==="host"){
-      // host picks seed
       const seed = (Math.random()*0xFFFFFFFF)>>>0;
       dcSend({t:"start", seed});
       startMatch(seed);
@@ -972,21 +1088,23 @@
     NET.frame=0; NET.myQ.clear(); NET.peerQ.clear();
     RNG = mulberry32(seed);
 
-    // left/right fighters (world-consistent)
     Left = Fighter(-1);
     Right= Fighter(+1);
 
-    // names depend on roles but both machines see same left/right
     Lname.textContent="HOST";
     Rname.textContent="GUEST";
 
     WORLD.camX=0;
-    popups.length=0; slashes.length=0; sparks.length=0;
+    WORLD.zoom=1; WORLD.zoomTarget=1;
+    WORLD.vignette=0; WORLD.vignetteTarget=0;
+    WORLD.timeScale=1;
+
+    popups.length=0; slashes.length=0; sparks.length=0; afterImgs.length=0; smokes.length=0;
+
     info.textContent="FIGHT • ping: 0ms";
     updateHUD();
   }
 
-  /* ================= Buttons ================= */
   document.getElementById("btnHost").onclick=async ()=>{
     tryLockLandscape();
     closeAll();
@@ -1033,6 +1151,18 @@
     updateFighter(Right,Left, dt, inRight,"R");
     separate(Left,Right,dt);
 
+    // cinematic (deterministic by state)
+    const anyUlt =
+      (Left.state==="ult" && Left.t < 0.95) ||
+      (Right.state==="ult" && Right.t < 0.95);
+
+    WORLD.zoomTarget = anyUlt ? 1.10 : 1.00;
+    WORLD.vignetteTarget = anyUlt ? 1.00 : 0.00;
+    WORLD.timeScale = anyUlt ? 0.82 : 1.00;
+
+    WORLD.zoom = lerp(WORLD.zoom, WORLD.zoomTarget, 0.12);
+    WORLD.vignette = lerp(WORLD.vignette, WORLD.vignetteTarget, 0.10);
+
     updateHUD();
     info.textContent = `FIGHT • ping: ${Math.round(NET.ping)}ms • HP: ${Left.hp}/${Left.hpMax} vs ${Right.hp}/${Right.hpMax}`;
   }
@@ -1041,10 +1171,11 @@
   let lastT=now();
   function loop(t){
     requestAnimationFrame(loop);
-    const dt=Math.min(0.033, Math.max(0.001, (t-lastT)/1000));
+    const dtRaw=Math.min(0.033, Math.max(0.001, (t-lastT)/1000));
     lastT=t;
 
     beginView();
+
     const ox=(WORLD.shakeT>0)?(Math.random()-0.5)*WORLD.shake:0;
     const oy=(WORLD.shakeT>0)?(Math.random()-0.5)*WORLD.shake:0;
     ctx.translate(ox,oy);
@@ -1062,16 +1193,13 @@
         dcSend({t:"ping", ts:now()});
       }
 
-      // Map inputs by role:
-      // host controls Left, guest controls Right
       const my = NET.myQ.get(NET.frame) || makeInput();
       const peer = NET.peerQ.get(NET.frame) || makeInput();
 
       const inLeft  = (myRole==="host") ? my   : peer;
       const inRight = (myRole==="host") ? peer : my;
 
-      // IMPORTANT: do NOT stall if peer missing -> use neutral input
-      stepSim(dt, inLeft, inRight);
+      stepSim(dtRaw * (WORLD.timeScale||1), inLeft, inRight);
 
       if(NET.frame>80){
         NET.myQ.delete(NET.frame-80);
@@ -1080,7 +1208,7 @@
       NET.frame++;
     }
 
-    drawFX(dt);
+    drawFX(dtRaw);
 
     if(NET.started){
       drawAssassin(Right);
@@ -1095,9 +1223,10 @@
       ctx.restore();
     }
 
+    drawCinematicOverlay();
     endView();
 
-    // rematch: host broadcasts new seed if someone dead
+    // rematch
     if(NET.started && (Left?.hp<=0 || Right?.hp<=0)){
       NET.started=false;
       setTimeout(()=>{
