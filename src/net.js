@@ -1,53 +1,61 @@
 // src/net.js
-export function createNetClient(){
-  let ws=null;
-  let onState=()=>{};
-  let onInfo=()=>{};
-  let slot=-1;
-  let room="";
+// Net layer: connect/join/send input/receive state/ping
+import { io } from "https://cdn.socket.io/4.7.5/socket.io.esm.min.js";
 
-  function connect(roomCode){
-    room = roomCode;
-    const proto = (location.protocol==="https:") ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
+export function createNetClient({ code, onState, onJoined, onCountdown, onInfo, onJoinFail }) {
+  const socket = io({
+    transports: ["websocket", "polling"],
+  });
 
-    ws.onopen=()=>{
-      ws.send(JSON.stringify({t:"join", room}));
-      onInfo({type:"status", text:"Connecting…"});
-    };
+  let role = "guest";      // "host" | "guest"
+  let pingMs = 0;
+  let _connected = false;
 
-    ws.onmessage=(ev)=>{
-      const msg = JSON.parse(ev.data);
-      if(msg.t==="welcome"){
-        slot = msg.slot;
-        onInfo({type:"welcome", slot, room:msg.room});
-      }
-      if(msg.t==="state"){
-        onState(msg.state);
-      }
-      if(msg.t==="ping"){
-        // ignore
-      }
-      if(msg.t==="status"){
-        onInfo({type:"status", text:msg.text});
-      }
-    };
+  // ----- ping -----
+  setInterval(() => {
+    const t0 = performance.now();
+    socket.emit("pingx", { t: t0 });
+  }, 1000);
 
-    ws.onclose=()=>{
-      onInfo({type:"status", text:"Disconnected"});
-    };
+  socket.on("pongx", ({ t }) => {
+    pingMs = Math.max(0, Math.round(performance.now() - t));
+  });
+
+  // ----- join flow -----
+  socket.on("connect", () => {
+    _connected = true;
+    socket.emit("joinRoom", { code });
+  });
+
+  socket.on("joinFail", (data) => {
+    onJoinFail?.(data);
+  });
+
+  socket.on("joined", ({ role: r, code: c, G }) => {
+    role = r;
+    onJoined?.({ role, code: c, G });
+  });
+
+  socket.on("countdown", (data) => onCountdown?.(data));
+  socket.on("info", (data) => onInfo?.(data));
+
+  socket.on("state", (G) => {
+    onState?.(G);
+  });
+
+  // ----- send input -----
+  function sendInput(inputObj) {
+    // IMPORTANT: mỗi client gửi input của chính nó, server sẽ gán theo role.
+    if (!_connected) return;
+    socket.emit("input", inputObj);
   }
 
-  function sendInput(inp){
-    if(!ws || ws.readyState!==1) return;
-    ws.send(JSON.stringify({t:"inp", inp}));
+  function getRole() { return role; }
+  function getPing() { return pingMs; }
+
+  function close() {
+    try { socket.disconnect(); } catch {}
   }
 
-  return {
-    connect,
-    sendInput,
-    setHandlers: (h)=>{ onState=h.onState||onState; onInfo=h.onInfo||onInfo; },
-    get slot(){ return slot; },
-    get room(){ return room; }
-  };
+  return { sendInput, getRole, getPing, close };
 }
