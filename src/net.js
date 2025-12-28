@@ -1,18 +1,27 @@
 // src/net.js
-// Net layer: connect/join/send input/receive state/ping
 import { io } from "https://cdn.socket.io/4.7.5/socket.io.esm.min.js";
 
-export function createNetClient({ code, onState, onJoined, onCountdown, onInfo, onJoinFail }) {
-  const socket = io({
+export function createNetClient({ code, onState, onJoined, onCountdown, onInfo, onJoinFail, onConnectError }) {
+  const socket = io(window.location.origin, {
     transports: ["websocket", "polling"],
   });
 
-  let role = "guest";      // "host" | "guest"
+  let role = "guest";
   let pingMs = 0;
-  let _connected = false;
+  let connected = false;
 
-  // ----- ping -----
+  socket.on("connect", () => {
+    connected = true;
+    socket.emit("joinRoom", { code });
+  });
+
+  socket.on("connect_error", (err) => {
+    onConnectError?.(String(err?.message || err));
+  });
+
+  // ping
   setInterval(() => {
+    if (!connected) return;
     const t0 = performance.now();
     socket.emit("pingx", { t: t0 });
   }, 1000);
@@ -21,15 +30,8 @@ export function createNetClient({ code, onState, onJoined, onCountdown, onInfo, 
     pingMs = Math.max(0, Math.round(performance.now() - t));
   });
 
-  // ----- join flow -----
-  socket.on("connect", () => {
-    _connected = true;
-    socket.emit("joinRoom", { code });
-  });
-
-  socket.on("joinFail", (data) => {
-    onJoinFail?.(data);
-  });
+  // join
+  socket.on("joinFail", (data) => onJoinFail?.(data));
 
   socket.on("joined", ({ role: r, code: c, G }) => {
     role = r;
@@ -38,15 +40,10 @@ export function createNetClient({ code, onState, onJoined, onCountdown, onInfo, 
 
   socket.on("countdown", (data) => onCountdown?.(data));
   socket.on("info", (data) => onInfo?.(data));
+  socket.on("state", (G) => onState?.(G));
 
-  socket.on("state", (G) => {
-    onState?.(G);
-  });
-
-  // ----- send input -----
   function sendInput(inputObj) {
-    // IMPORTANT: mỗi client gửi input của chính nó, server sẽ gán theo role.
-    if (!_connected) return;
+    if (!connected) return;
     socket.emit("input", inputObj);
   }
 
