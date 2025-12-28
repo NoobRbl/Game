@@ -35,10 +35,9 @@
 
 <script type="module">
   import { createNetClient } from "/src/net.js";
-  const out = document.getElementById("out");
-  const menu = document.getElementById("menu");
-  const joinInput = document.getElementById("joinInput");
 
+  const out = document.getElementById("out");
+  const joinInput = document.getElementById("joinInput");
   const log = (m)=>{ console.log(m); out.textContent = String(m); };
 
   // ✅ chặn double-tap zoom + pinch zoom (mobile)
@@ -50,17 +49,23 @@
   }, { passive:false });
   addEventListener("gesturestart", (e)=>e.preventDefault(), { passive:false });
 
-  function parseHashRoom(){
-    const h = location.hash || "";
-    const m = h.match(/ROOM=([A-Z0-9]{4,10})/i);
-    return m ? m[1].toUpperCase() : "";
+  function normalizeRoomCode(raw){
+    raw = String(raw || "").trim();
+    if(!raw) return "";
+
+    // nếu là hash
+    if(raw.startsWith("#")) raw = raw.slice(1);
+
+    // nếu là link full
+    const m = raw.match(/ROOM=([A-Z0-9]+)/i);
+    if(m) raw = m[1];
+
+    raw = raw.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+    return raw.slice(0,5); // code 5 ký tự
   }
-  function normalizeJoinValue(v){
-    v = (v||"").trim();
-    const m = v.match(/ROOM=([A-Z0-9]{4,10})/i);
-    if (m) return m[1].toUpperCase();
-    if (/^[A-Z0-9]{4,10}$/i.test(v)) return v.toUpperCase();
-    return "";
+
+  function parseHashRoom(){
+    return normalizeRoomCode(location.hash || "");
   }
 
   let net = null;
@@ -77,21 +82,23 @@
   }
 
   function startNet(code){
-    if(net) net.close();
+    code = normalizeRoomCode(code);
+    if(!code || code.length < 5){ log("❌ Invalid room code"); return; }
 
+    if(net) net.close();
     log("Joining room " + code + " ...");
 
     net = createNetClient({
       code,
 
+      onConnectError: (msg)=> log("Socket error ❌ " + msg),
+
       onJoined: ({ role, code }) => {
-        log("JOINED ✅ role=" + role + " room=" + code + " (ping sẽ hiện sau 1s)");
-        // ✅ tại đây bạn ghép game UI/canvas vào
-        // menu.style.display="none"; // nếu muốn ẩn sảnh ngay
+        log("JOINED ✅ role=" + role + " room=" + code);
       },
 
       onJoinFail: (e) => {
-        log("JoinFail ❌ " + (e?.reason || "unknown"));
+        log("JoinFail ❌ " + (e?.reason || "unknown") + (e?.code ? (" ("+e.code+")") : ""));
       },
 
       onInfo: (e) => {
@@ -103,7 +110,6 @@
       },
 
       onState: (G) => {
-        // test: update ping + hp
         const ping = net?.getPing?.() ?? 0;
         const lh = G?.Left?.hp ?? "?";
         const rh = G?.Right?.hp ?? "?";
@@ -119,7 +125,7 @@
       lastLink = link;
       joinInput.value = link;
       location.hash = "ROOM=" + code;
-      startNet(code);
+      startNet(code); // ✅ auto join after create
     }catch(e){
       log("GEN ERROR ❌ " + (e?.message || e));
     }
@@ -140,12 +146,13 @@
   };
 
   document.getElementById("btnJoin").onclick = ()=>{
-    const code = normalizeJoinValue(joinInput.value || parseHashRoom());
+    const code = normalizeRoomCode(joinInput.value || parseHashRoom());
     if(!code){ log("Dán link hoặc nhập code (ABCDE)"); return; }
     location.hash = "ROOM=" + code;
     startNet(code);
   };
 
+  // ✅ auto join from link
   const auto = parseHashRoom();
   if(auto){
     joinInput.value = `${location.origin}/#ROOM=${auto}`;
