@@ -5,64 +5,199 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <title>Anime Battle Online</title>
 <style>
-  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;}
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;-webkit-user-select:none;user-select:none}
   body{display:flex;align-items:center;justify-content:center}
-  .card{width:90%;max-width:420px;padding:16px;border-radius:14px;
-        background:rgba(20,25,40,.85);border:1px solid rgba(255,255,255,.1)}
-  button,input{width:100%;margin-top:10px;padding:12px;border-radius:12px;
-        border:1px solid rgba(255,255,255,.15);background:#111;color:#fff}
-  #out{margin-top:12px;font-size:13px;word-break:break-all}
+  .card{width:92%;max-width:440px;padding:16px;border-radius:16px;
+        background:rgba(20,25,40,.88);border:1px solid rgba(255,255,255,.10);
+        box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  button,input{width:100%;margin-top:10px;padding:12px 12px;border-radius:12px;
+        border:1px solid rgba(255,255,255,.15);background:rgba(10,12,18,.85);color:#fff;outline:none}
+  button{cursor:pointer}
+  .row{display:flex;gap:10px}
+  .row button{width:50%}
+  #out{margin-top:12px;font-size:13px;word-break:break-all;opacity:.95;line-height:1.35}
+  #game{display:none;position:fixed;inset:0;background:#000}
+  #gameInfo{position:absolute;left:12px;top:12px;font-size:14px;background:rgba(0,0,0,.35);
+            padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12)}
 </style>
 </head>
 <body>
 
-<div class="card">
-  <b>Anime Battle Online</b>
-  <button id="btnGen">HOST + GEN LINK</button>
+<div id="menu" class="card">
+  <div style="font-weight:700;font-size:16px;margin-bottom:6px">Anime Battle Online</div>
+  <div class="row">
+    <button id="btnGen">HOST + GEN LINK</button>
+    <button id="btnCopy">COPY LINK</button>
+  </div>
   <input id="joinInput" placeholder="Dán link hoặc code (ABCDE)" />
   <button id="btnJoin">JOIN</button>
-  <div id="out"></div>
+  <div id="out">Status: ready</div>
 </div>
 
+<div id="game">
+  <div id="gameInfo">Connecting…</div>
+</div>
+
+<!-- ✅ BẮT BUỘC: Socket.IO client -->
+<script src="/socket.io/socket.io.js"></script>
+
 <script type="module">
-const out = document.getElementById("out");
-const log = (m)=>{ console.log(m); out.textContent=String(m); };
+  const out = document.getElementById("out");
+  const game = document.getElementById("game");
+  const gameInfo = document.getElementById("gameInfo");
+  const menu = document.getElementById("menu");
+  const joinInput = document.getElementById("joinInput");
 
-// ===== CREATE ROOM =====
-async function createRoom(){
-  log("Creating room...");
-  const r = await fetch("/api/room", { method:"POST" });
-  const t = await r.text();
-  log("API response: " + t);
-  const j = JSON.parse(t);
-  return j.code;
-}
+  const log = (m)=>{ console.log(m); out.textContent = String(m); };
 
-// ===== HOST =====
-document.getElementById("btnGen").onclick = async ()=>{
-  try{
-    const code = await createRoom();
-    const link = location.origin + "/#ROOM=" + code;
-    log("ROOM LINK: " + link);
-    location.hash = "ROOM=" + code;
-  }catch(e){
-    log("ERROR: " + e.message);
+  // ✅ chặn double-tap zoom + pinch zoom (mobile)
+  let lastTap = 0;
+  addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - lastTap < 300) e.preventDefault();
+    lastTap = now;
+  }, { passive:false });
+  addEventListener("gesturestart", (e)=>e.preventDefault(), { passive:false });
+
+  // ====== Socket connect ======
+  // IMPORTANT: io() dùng đúng host hiện tại (render domain)
+  const socket = io({
+    transports: ["websocket","polling"],
+    reconnection: true,
+    reconnectionAttempts: 20,
+    reconnectionDelay: 300
+  });
+
+  socket.on("connect", ()=>{
+    log("Socket connected ✅ id=" + socket.id);
+  });
+
+  socket.on("connect_error", (e)=>{
+    log("Socket connect_error ❌ " + (e?.message || e));
+  });
+
+  socket.on("disconnect", (r)=>{
+    log("Socket disconnected: " + r);
+  });
+
+  // ===== helpers =====
+  function parseHashRoom(){
+    const h = location.hash || "";
+    const m = h.match(/ROOM=([A-Z0-9]{4,10})/i);
+    return m ? m[1].toUpperCase() : "";
   }
-};
 
-// ===== JOIN =====
-document.getElementById("btnJoin").onclick = ()=>{
-  const v = document.getElementById("joinInput").value.trim();
-  if(!v){ log("Nhập code hoặc link"); return; }
-  const m = v.match(/ROOM=([A-Z0-9]+)/i);
-  const code = m ? m[1] : v.toUpperCase();
-  location.hash = "ROOM=" + code;
-  log("Joining room " + code);
-};
+  function normalizeJoinValue(v){
+    v = (v||"").trim();
+    const m = v.match(/ROOM=([A-Z0-9]{4,10})/i);
+    if (m) return m[1].toUpperCase();
+    if (/^[A-Z0-9]{4,10}$/i.test(v)) return v.toUpperCase();
+    return "";
+  }
 
-// ===== AUTO JOIN =====
-const h = location.hash.match(/ROOM=([A-Z0-9]+)/i);
-if(h) log("Auto join ROOM=" + h[1]);
+  let lastLink = "";
+
+  async function createRoom(){
+    log("Creating room...");
+    const res = await fetch("/api/room", { method:"POST" });
+    const txt = await res.text();
+    if(!res.ok){
+      throw new Error("HTTP " + res.status + " body=" + txt.slice(0,120));
+    }
+    let j;
+    try{ j = JSON.parse(txt); }catch{ throw new Error("API non-JSON: " + txt.slice(0,120)); }
+    if(!j.ok || !j.code) throw new Error("API missing {ok,code}: " + txt.slice(0,120));
+    return j.code.toUpperCase();
+  }
+
+  function showGame(role, code){
+    menu.style.display = "none";
+    game.style.display = "block";
+    gameInfo.textContent = `JOINED ✅ role=${role} room=${code}. (Bước tiếp theo: gắn game loop/canvas)`;
+  }
+
+  async function joinRoom(code){
+    if(!code){ log("No code"); return; }
+
+    // đợi socket connect trước khi join
+    if(!socket.connected){
+      log("Waiting socket connect...");
+      await new Promise((resolve, reject)=>{
+        const t = setTimeout(()=>reject(new Error("Socket timeout")), 6000);
+        socket.once("connect", ()=>{ clearTimeout(t); resolve(); });
+      });
+    }
+
+    log("Joining room " + code + " ...");
+    location.hash = "ROOM=" + code;
+
+    // ✅ gửi joinRoom thật
+    socket.emit("joinRoom", { code });
+
+    // timeout nếu không thấy phản hồi
+    const timeout = setTimeout(()=>{
+      log("Join timeout ❌ (server không phản hồi). Kiểm tra server.js đang chạy Web Service, không phải Static Site.");
+    }, 6000);
+
+    socket.once("joined", (data)=>{
+      clearTimeout(timeout);
+      if(!data?.ok){
+        log("Joined response invalid ❌");
+        return;
+      }
+      log("Joined ✅ role=" + data.role + " code=" + data.code);
+      showGame(data.role, data.code);
+    });
+
+    socket.once("joinFail", (e)=>{
+      clearTimeout(timeout);
+      log("JoinFail ❌ " + (e?.reason || "unknown"));
+    });
+  }
+
+  // ===== UI events =====
+  document.getElementById("btnGen").onclick = async ()=>{
+    try{
+      const code = await createRoom();
+      const link = `${location.origin}/#ROOM=${code}`;
+      lastLink = link;
+      joinInput.value = link;
+      log("ROOM LINK ✅ " + link);
+      // host tự join luôn
+      await joinRoom(code);
+    }catch(e){
+      log("GEN ERROR ❌ " + (e?.message || e));
+    }
+  };
+
+  document.getElementById("btnCopy").onclick = async ()=>{
+    if(!lastLink){
+      lastLink = joinInput.value.trim();
+    }
+    if(!lastLink){ log("Chưa có link để copy"); return; }
+    try{
+      await navigator.clipboard.writeText(lastLink);
+      log("Copied ✅");
+    }catch{
+      joinInput.focus();
+      joinInput.select();
+      document.execCommand("copy");
+      log("Copied (fallback) ✅");
+    }
+  };
+
+  document.getElementById("btnJoin").onclick = async ()=>{
+    const code = normalizeJoinValue(joinInput.value || parseHashRoom());
+    if(!code){ log("Dán link hoặc nhập code (ABCDE)"); return; }
+    await joinRoom(code);
+  };
+
+  // auto-join nếu mở link có hash
+  const auto = parseHashRoom();
+  if(auto){
+    joinInput.value = `${location.origin}/#ROOM=${auto}`;
+    await joinRoom(auto);
+  }
 </script>
 
 </body>
