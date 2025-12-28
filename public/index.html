@@ -1,181 +1,69 @@
 <!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Anime Battle Online</title>
-  <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#000;}
-    body{touch-action:none;-webkit-user-select:none;user-select:none;}
-    #cv{position:fixed;inset:0;width:100%;height:100%;}
-    .ui{
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto; color:#fff;
-      background:radial-gradient(ellipse at center, rgba(30,40,80,.55), rgba(0,0,0,.9));
-    }
-    .card{
-      width:min(520px,92vw);
-      background:rgba(15,18,30,.72);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:16px;
-      padding:16px;
-      backdrop-filter: blur(10px);
-    }
-    .row{display:flex;gap:10px;flex-wrap:wrap;}
-    button{
-      flex:1;
-      background:rgba(255,255,255,.08);
-      border:1px solid rgba(255,255,255,.12);
-      color:#fff;
-      padding:12px 12px;
-      border-radius:14px;
-      font-weight:700;
-      cursor:pointer;
-    }
-    button:active{transform:scale(.98);}
-    input{
-      width:100%;
-      padding:12px 12px;
-      border-radius:12px;
-      border:1px solid rgba(255,255,255,.12);
-      background:rgba(0,0,0,.25);
-      color:#fff;
-      outline:none;
-    }
-    .hint{opacity:.8;font-size:13px;line-height:1.35}
-    .link{margin-top:10px;word-break:break-all;font-size:13px;opacity:.9}
-    #hud{position:fixed; left:0; right:0; top:0; padding:10px; color:#fff; font-family:system-ui; pointer-events:none;}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Anime Battle Online</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;}
+  body{display:flex;align-items:center;justify-content:center}
+  .card{width:90%;max-width:420px;padding:16px;border-radius:14px;
+        background:rgba(20,25,40,.85);border:1px solid rgba(255,255,255,.1)}
+  button,input{width:100%;margin-top:10px;padding:12px;border-radius:12px;
+        border:1px solid rgba(255,255,255,.15);background:#111;color:#fff}
+  #out{margin-top:12px;font-size:13px;word-break:break-all}
+</style>
 </head>
 <body>
-  <canvas id="cv"></canvas>
 
-  <div id="menu" class="ui">
-    <div class="card">
-      <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Anime Battle Online</div>
-      <div class="hint">Host tạo phòng → Gen Link → gửi link cho bạn. Bạn mở link là vào luôn.</div>
+<div class="card">
+  <b>Anime Battle Online</b>
+  <button id="btnGen">HOST + GEN LINK</button>
+  <input id="joinInput" placeholder="Dán link hoặc code (ABCDE)" />
+  <button id="btnJoin">JOIN</button>
+  <div id="out"></div>
+</div>
 
-      <div style="height:12px"></div>
+<script type="module">
+const out = document.getElementById("out");
+const log = (m)=>{ console.log(m); out.textContent=String(m); };
 
-      <div class="row">
-        <button id="btnHost">HOST</button>
-        <button id="btnGen">GEN LINK</button>
-      </div>
+// ===== CREATE ROOM =====
+async function createRoom(){
+  log("Creating room...");
+  const r = await fetch("/api/room", { method:"POST" });
+  const t = await r.text();
+  log("API response: " + t);
+  const j = JSON.parse(t);
+  return j.code;
+}
 
-      <div style="height:10px"></div>
+// ===== HOST =====
+document.getElementById("btnGen").onclick = async ()=>{
+  try{
+    const code = await createRoom();
+    const link = location.origin + "/#ROOM=" + code;
+    log("ROOM LINK: " + link);
+    location.hash = "ROOM=" + code;
+  }catch(e){
+    log("ERROR: " + e.message);
+  }
+};
 
-      <input id="joinInput" placeholder="Dán link hoặc nhập code (ABCDE) rồi bấm JOIN" />
-      <div style="height:10px"></div>
+// ===== JOIN =====
+document.getElementById("btnJoin").onclick = ()=>{
+  const v = document.getElementById("joinInput").value.trim();
+  if(!v){ log("Nhập code hoặc link"); return; }
+  const m = v.match(/ROOM=([A-Z0-9]+)/i);
+  const code = m ? m[1] : v.toUpperCase();
+  location.hash = "ROOM=" + code;
+  log("Joining room " + code);
+};
 
-      <div class="row">
-        <button id="btnJoin">JOIN</button>
-        <button id="btnCopy" style="flex:0.7">COPY LINK</button>
-      </div>
+// ===== AUTO JOIN =====
+const h = location.hash.match(/ROOM=([A-Z0-9]+)/i);
+if(h) log("Auto join ROOM=" + h[1]);
+</script>
 
-      <div id="out" class="link"></div>
-    </div>
-  </div>
-
-  <div id="hud"></div>
-
-  <script type="module">
-    // ✅ chặn double-tap zoom + pinch zoom
-    let lastTap = 0;
-    addEventListener("touchend", (e) => {
-      const now = Date.now();
-      if (now - lastTap < 300) e.preventDefault();
-      lastTap = now;
-    }, { passive:false });
-    addEventListener("gesturestart", (e)=>e.preventDefault(), { passive:false });
-
-    import { startClient } from "../src/main_client.js";
-
-    const $ = (id)=>document.getElementById(id);
-    const menu = $("menu");
-    const out = $("out");
-    const joinInput = $("joinInput");
-
-    let lastLink = "";
-
-    function parseHashRoom() {
-      const h = location.hash || "";
-      const m = h.match(/ROOM=([A-Z0-9]{4,8})/i);
-      return m ? m[1].toUpperCase() : "";
-    }
-
-    function normalizeJoinValue(v) {
-      v = (v||"").trim();
-      // nếu user dán cả link -> lấy ROOM=
-      const m = v.match(/ROOM=([A-Z0-9]{4,8})/i);
-      if (m) return m[1].toUpperCase();
-      // nếu chỉ code
-      if (/^[A-Z0-9]{4,8}$/i.test(v)) return v.toUpperCase();
-      return "";
-    }
-
-    async function createRoom() {
-      const r = await fetch("/api/room", { method:"POST", headers:{ "Content-Type":"application/json" } });
-      const j = await r.json();
-      if (!j.ok) throw new Error("Create room failed");
-      return j.code;
-    }
-
-    async function hostAndJoin(code) {
-      // start game client join room
-      menu.style.display = "none";
-      await startClient({ code });
-    }
-
-    $("btnHost").onclick = async () => {
-      // Host chỉ “vào mode host”, Gen mới tạo code
-      out.textContent = "Bấm GEN LINK để tạo phòng...";
-    };
-
-    $("btnGen").onclick = async () => {
-      try {
-        const code = await createRoom();
-        const link = `${location.origin}/#ROOM=${code}`;
-        lastLink = link;
-        out.textContent = "LINK PHÒNG: " + link;
-
-        // set hash để ai mở link auto join
-        location.hash = `#ROOM=${code}`;
-
-        // auto join as host
-        await hostAndJoin(code);
-      } catch (e) {
-        out.textContent = "Lỗi Gen Link: " + (e?.message || e);
-      }
-    };
-
-    $("btnCopy").onclick = async () => {
-      if (!lastLink) { out.textContent = "Chưa có link, bấm GEN LINK trước."; return; }
-      try {
-        await navigator.clipboard.writeText(lastLink);
-        out.textContent = "Đã copy link ✅";
-      } catch {
-        // fallback
-        joinInput.value = lastLink;
-        joinInput.select();
-        document.execCommand("copy");
-        out.textContent = "Đã copy (fallback) ✅";
-      }
-    };
-
-    $("btnJoin").onclick = async () => {
-      const code = normalizeJoinValue(joinInput.value || parseHashRoom());
-      if (!code) { out.textContent = "Bạn hãy dán link hoặc nhập code đúng (vd: ABCDE)."; return; }
-      location.hash = `#ROOM=${code}`;
-      menu.style.display = "none";
-      await startClient({ code });
-    };
-
-    // auto join nếu mở bằng link
-    const auto = parseHashRoom();
-    if (auto) {
-      menu.style.display = "none";
-      startClient({ code: auto });
-    }
-  </script>
 </body>
 </html>
