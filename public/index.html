@@ -5,160 +5,98 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <title>Anime Battle Online</title>
 <style>
-  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;-webkit-user-select:none;user-select:none}
-  body{display:flex;align-items:center;justify-content:center}
-  .card{width:92%;max-width:460px;padding:16px;border-radius:16px;
-        background:rgba(20,25,40,.88);border:1px solid rgba(255,255,255,.10);
-        box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+  #wrap{position:fixed;inset:0;overflow:hidden}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000}
+
+  /* HUD */
+  #hud{position:absolute;left:0;right:0;top:0;padding:10px;pointer-events:none}
+  .barBox{height:10px;border-radius:999px;background:rgba(255,255,255,.10);overflow:hidden}
+  .barFill{height:100%;width:50%}
+  .rowHud{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .side{width:42%}
+  .name{font-weight:800;font-size:12px;opacity:.95;margin-bottom:6px}
+  .txt{font-size:12px;opacity:.9;margin-top:6px}
+  #midTxt{font-weight:900;text-align:center;margin-top:8px;opacity:.95}
+
+  /* Lobby card */
+  #lobby{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:92%;max-width:460px;padding:16px;border-radius:16px;
+    background:rgba(20,25,40,.88);border:1px solid rgba(255,255,255,.10);
+    box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:10
+  }
   button,input{width:100%;margin-top:10px;padding:12px;border-radius:12px;
-        border:1px solid rgba(255,255,255,.15);background:rgba(10,12,18,.85);color:#fff;outline:none}
+    border:1px solid rgba(255,255,255,.15);background:rgba(10,12,18,.85);color:#fff;outline:none
+  }
   .row{display:flex;gap:10px}
   .row button{width:50%}
-  #out{margin-top:12px;font-size:13px;word-break:break-all;opacity:.95;line-height:1.35}
+  #lobStatus{margin-top:10px;font-size:13px;opacity:.95;word-break:break-all}
+
+  /* Mobile controls */
+  #controls{position:absolute;left:0;right:0;bottom:0;height:45%;pointer-events:none}
+  #joyL{position:absolute;left:18px;bottom:18px;width:150px;height:150px;border-radius:999px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);pointer-events:auto;touch-action:none}
+  #stickL{position:absolute;left:50%;top:50%;width:70px;height:70px;border-radius:999px;
+    transform:translate(-50%,-50%);background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18)}
+  .btnGrid{position:absolute;right:18px;bottom:18px;display:grid;grid-template-columns:repeat(3,86px);gap:12px;pointer-events:auto}
+  .b{width:86px;height:86px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900}
+  .b small{font-size:12px;opacity:.8;margin-top:4px}
 </style>
 </head>
 <body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
 
-<div id="menu" class="card">
-  <div style="font-weight:800;font-size:16px;margin-bottom:6px">Anime Battle Online</div>
+  <div id="hud">
+    <div class="rowHud">
+      <div class="side">
+        <div class="name" id="p1Name">YOU</div>
+        <div class="barBox"><div class="barFill" id="p1Hp" style="background:rgba(110,220,255,.9)"></div></div>
+        <div class="barBox" style="margin-top:6px"><div class="barFill" id="p1En" style="background:rgba(255,210,120,.9);width:0%"></div></div>
+        <div class="txt" id="p1HpTxt">HP: 0/0</div>
+      </div>
 
-  <div class="row">
-    <button id="btnGen">HOST + GEN LINK</button>
-    <button id="btnCopy">COPY LINK</button>
+      <div style="width:16%;text-align:center">
+        <div id="midTxt">—</div>
+      </div>
+
+      <div class="side" style="text-align:right">
+        <div class="name" id="p2Name">FOE</div>
+        <div class="barBox"><div class="barFill" id="p2Hp" style="background:rgba(255,120,120,.9)"></div></div>
+        <div class="barBox" style="margin-top:6px"><div class="barFill" id="p2En" style="background:rgba(255,210,120,.9);width:0%"></div></div>
+        <div class="txt" id="p2HpTxt">HP: 0/0</div>
+      </div>
+    </div>
   </div>
 
-  <input id="joinInput" placeholder="Dán link hoặc nhập code (ABCDE)" />
-  <button id="btnJoin">JOIN</button>
+  <div id="lobby">
+    <div style="font-weight:900;font-size:16px;margin-bottom:6px">Anime Battle Online</div>
+    <div class="row">
+      <button id="btnHost">HOST + GEN LINK</button>
+      <button id="btnCopy">COPY LINK</button>
+    </div>
+    <input id="roomInp" placeholder="Dán link hoặc nhập code phòng" />
+    <button id="btnJoin">JOIN</button>
+    <div id="lobStatus">Status: ready</div>
+  </div>
 
-  <div id="out">Status: ready</div>
+  <div id="controls">
+    <div id="joyL"><div id="stickL"></div></div>
+    <div class="btnGrid">
+      <div class="b" id="bUlt">ULT<small>O</small></div>
+      <div class="b" id="bJump">JUMP<small>K</small></div>
+      <div class="b" id="bS2">S2<small>I</small></div>
+
+      <div class="b" id="bSub">SUB<small>P</small></div>
+      <div class="b" id="bDash">DASH<small>L</small></div>
+      <div class="b" id="bS1">S1<small>U</small></div>
+
+      <div class="b" id="bAtk" style="grid-column:2 / span 2;width:184px">ATK<small>J</small></div>
+    </div>
+  </div>
 </div>
 
-<script type="module">
-  import { createNetClient } from "/src/net.js";
-
-  const out = document.getElementById("out");
-  const joinInput = document.getElementById("joinInput");
-  const log = (m)=>{ console.log(m); out.textContent = String(m); };
-
-  // ✅ chặn double-tap zoom + pinch zoom (mobile)
-  let lastTap = 0;
-  addEventListener("touchend", (e) => {
-    const now = Date.now();
-    if (now - lastTap < 300) e.preventDefault();
-    lastTap = now;
-  }, { passive:false });
-  addEventListener("gesturestart", (e)=>e.preventDefault(), { passive:false });
-
-  function normalizeRoomCode(raw){
-    raw = String(raw || "").trim();
-    if(!raw) return "";
-
-    // nếu là hash
-    if(raw.startsWith("#")) raw = raw.slice(1);
-
-    // nếu là link full
-    const m = raw.match(/ROOM=([A-Z0-9]+)/i);
-    if(m) raw = m[1];
-
-    raw = raw.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
-    return raw.slice(0,5); // code 5 ký tự
-  }
-
-  function parseHashRoom(){
-    return normalizeRoomCode(location.hash || "");
-  }
-
-  let net = null;
-  let lastLink = "";
-
-  async function createRoom(){
-    log("Creating room...");
-    const res = await fetch("/api/room", { method:"POST" });
-    const txt = await res.text();
-    if(!res.ok) throw new Error("HTTP " + res.status + " " + txt.slice(0,120));
-    const j = JSON.parse(txt);
-    if(!j.ok || !j.code) throw new Error("API invalid: " + txt.slice(0,120));
-    return String(j.code).toUpperCase();
-  }
-
-  function startNet(code){
-    code = normalizeRoomCode(code);
-    if(!code || code.length < 5){ log("❌ Invalid room code"); return; }
-
-    if(net) net.close();
-    log("Joining room " + code + " ...");
-
-    net = createNetClient({
-      code,
-
-      onConnectError: (msg)=> log("Socket error ❌ " + msg),
-
-      onJoined: ({ role, code }) => {
-        log("JOINED ✅ role=" + role + " room=" + code);
-      },
-
-      onJoinFail: (e) => {
-        log("JoinFail ❌ " + (e?.reason || "unknown") + (e?.code ? (" ("+e.code+")") : ""));
-      },
-
-      onInfo: (e) => {
-        log("INFO: " + (e?.msg || JSON.stringify(e)));
-      },
-
-      onCountdown: (e) => {
-        log("COUNTDOWN: " + JSON.stringify(e));
-      },
-
-      onState: (G) => {
-        const ping = net?.getPing?.() ?? 0;
-        const lh = G?.Left?.hp ?? "?";
-        const rh = G?.Right?.hp ?? "?";
-        out.textContent = `STATE ✅ ping:${ping}ms | HP ${lh} vs ${rh}`;
-      },
-    });
-  }
-
-  document.getElementById("btnGen").onclick = async ()=>{
-    try{
-      const code = await createRoom();
-      const link = `${location.origin}/#ROOM=${code}`;
-      lastLink = link;
-      joinInput.value = link;
-      location.hash = "ROOM=" + code;
-      startNet(code); // ✅ auto join after create
-    }catch(e){
-      log("GEN ERROR ❌ " + (e?.message || e));
-    }
-  };
-
-  document.getElementById("btnCopy").onclick = async ()=>{
-    const text = lastLink || joinInput.value.trim();
-    if(!text){ log("Chưa có link để copy"); return; }
-    try{
-      await navigator.clipboard.writeText(text);
-      log("Copied ✅");
-    }catch{
-      joinInput.focus();
-      joinInput.select();
-      document.execCommand("copy");
-      log("Copied (fallback) ✅");
-    }
-  };
-
-  document.getElementById("btnJoin").onclick = ()=>{
-    const code = normalizeRoomCode(joinInput.value || parseHashRoom());
-    if(!code){ log("Dán link hoặc nhập code (ABCDE)"); return; }
-    location.hash = "ROOM=" + code;
-    startNet(code);
-  };
-
-  // ✅ auto join from link
-  const auto = parseHashRoom();
-  if(auto){
-    joinInput.value = `${location.origin}/#ROOM=${auto}`;
-    startNet(auto);
-  }
-</script>
-
+<script type="module" src="/src/main.js"></script>
 </body>
 </html>
