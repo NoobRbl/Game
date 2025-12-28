@@ -1,406 +1,427 @@
-import { makeRng } from "./rng.js";
-import { Animator } from "./anim.js";
-import { getCharacter } from "./characters/registry.js";
-
+// src/game.js
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const lerp=(a,b,t)=>a+(b-a)*t;
-const sign=v=>v<0?-1:1;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndi=(a,b)=>Math.floor(rnd(a,b+1));
 
-export function createGame(){
-  const G={
-    seed:0,
-    rng:null,
-
-    Left:null,
-    Right:null,
-
-    // cinematic
-    zoom:1, zoomTarget:1,
-    vignette:0, vignetteTarget:0,
-    timeScale:1,
-
-    // camera & fx
-    camX:0,
-    shake:0, shakeT:0,
-    flash:0, flashT:0,
+export function createGameState(seed=0){
+  const G = {
+    t:0,
+    // map bounds (world units)
+    WORLD:{ left:-540, right:540, floor:0 },
+    camX:0, camZoom:1, // zoom handled in render (we pass camZoom)
+    phase:"lobby",  // lobby -> countdown -> fight
+    phaseT:0,
+    midText:"Waiting…",
+    pingMs:0,
 
     fx:{
-      popups:[], slashes:[], sparks:[], afterImgs:[], smokes:[]
-    }
+      slashes:[],
+      sparks:[],
+      popups:[],
+      // NEW: sprite FX
+      sprites:[] // {kind:"s1"|"s2"|"ult", wx, wy, t, life, face, scale}
+    },
+
+    Left: makeFighter(-160,0, 1, "YOU"),
+    Right: makeFighter(160,0, -1, "FOE"),
   };
+  return G;
+}
 
-  function startShake(d,p){ G.shakeT=Math.max(G.shakeT,d); G.shake=Math.max(G.shake,p); }
-  function startFlash(i,d){ G.flashT=Math.max(G.flashT,d); G.flash=Math.max(G.flash,i); }
+function makeFighter(x,y,face,name){
+  const hpMax = rndi(20109,36098);
+  return {
+    name,
+    x,y, vx:0, vy:0,
+    face,
+    grounded:true,
+    jumpCount:0,
 
-  function rollHP(char){ return G.rng.int(char.stats.hpMin, char.stats.hpMax); }
-  function rollDamage(char){
-    const crit = (G.rng.f() < char.stats.critChance);
-    if(crit) return { dmg:G.rng.int(char.stats.critMin,char.stats.critMax), crit:true };
-    return { dmg:G.rng.int(char.stats.dmgMin,char.stats.dmgMax), crit:false };
+    hpMax, hp:hpMax,
+    enMax:100, en:0,
+
+    // states
+    invul:0,
+    stun:0,         // cannot act
+    hitT:0,         // visual hit anim hint
+    atkT:0, atkKind:1,
+
+    // cooldowns
+    cdAtk:0,
+    cdDash:0,
+    cdS1:0,
+    cdS2:0,
+    cdUlt:0,
+
+    // DOT burn
+    burnT:0,
+    burnTick:0,
+    burnDpsMin:100,
+    burnDpsMax:300,
+
+    dead:false,
+  };
+}
+
+function addPopup(G,wx,wy,text,crit=false){
+  G.fx.popups.push({wx,wy,text,crit,t:0,life:0.75});
+}
+
+function addSparks(G,wx,wy,count=6){
+  for(let i=0;i<count;i++){
+    G.fx.sparks.push({wx:wx+rnd(-10,10), wy:wy+rnd(-10,10), s:rnd(3,6), t:0, life:rnd(0.12,0.22)});
+  }
+}
+
+function addSlash(G,wx,wy,kind="atk"){
+  G.fx.slashes.push({wx,wy,rot:rnd(-0.4,0.4), len:rnd(80,120), w:rnd(10,16), kind, t:0, life:0.16});
+}
+
+function addSpriteFX(G, kind, wx, wy, face=1, scale=1, life=0.45){
+  G.fx.sprites.push({kind, wx, wy, face, scale, t:0, life});
+}
+
+function applyHit(G, attacker, target, dmg, opts={}){
+  if(target.dead) return;
+
+  // damage
+  target.hp = Math.max(0, target.hp - dmg);
+  addPopup(G, target.x, target.y-80, String(Math.round(dmg)), false);
+  addSparks(G, target.x, target.y-60, 10);
+
+  // stun / knock / knockup
+  const st = opts.stun ?? 0.08;
+  const kx = opts.kx ?? 120;
+  const ky = opts.ky ?? 0;
+
+  target.stun = Math.max(target.stun, st);
+  target.hitT = Math.max(target.hitT, 0.12);
+
+  // push away
+  const dir = Math.sign(attacker.face || 1);
+  target.vx += dir * (kx);
+  if(ky>0){
+    target.vy = Math.max(target.vy, ky);
+    target.grounded = false;
   }
 
-  function Fighter(side, charId){
-    const char = getCharacter(charId);
-    const hp = rollHP(char);
-    return {
-      side, char,
-      animator: new Animator(char.anim),
-      sheetImg: null, // loaded in render
-      x: side<0 ? -280 : 280,
-      y: 0, vx:0, vy:0,
-      face: side<0 ? 1 : -1,
-      hp, hpMax: hp,
-      en: 100, enMax: 100,
+  // energy gain
+  attacker.en = clamp(attacker.en + (opts.enGain ?? 10), 0, attacker.enMax);
 
-      state:"idle", t:0,
-      lock:0, stun:0, invul:0,
-      cdDash:0, cdS1:0, cdS2:0, cdUlt:0, cdSub:0,
-      atkCd:0, combo:0, comboT:0,
-      hitstop:0, didHit:false,
-      ult:null,
+  if(target.hp<=0){
+    target.dead=true;
+    target.stun=999;
+    G.phase="ko";
+    G.phaseT=0;
+    G.midText="KO!";
+  }
+}
 
-      move: char.stats.move,
-      dashSpd: char.stats.dash,
-      jump: char.stats.jump
-    };
+function startBurn(target, dur=2.0){
+  target.burnT = Math.max(target.burnT, dur);
+  target.burnTick = 0;
+}
+
+export function stepGame(G, dt, inpL, inpR){
+  G.t += dt;
+
+  // countdown flow
+  if(G.phase==="countdown"){
+    G.phaseT += dt;
+    const t=G.phaseT;
+    if(t<1) G.midText="1";
+    else if(t<2) G.midText="2";
+    else if(t<3) G.midText="3";
+    else if(t<3.6) G.midText="READY";
+    else { G.phase="fight"; G.phaseT=0; G.midText="FIGHT"; }
+  } else if(G.phase==="fight"){
+    G.phaseT += dt;
+    if(G.phaseT>1.0) G.midText=`FIGHT • ping: ${Math.round(G.pingMs)}ms`;
+  } else if(G.phase==="lobby"){
+    G.midText="Waiting player…";
+  } else if(G.phase==="ko"){
+    G.phaseT += dt;
   }
 
-  function rectHit(att, def, range, w, h){
-    const hx=att.x + att.face*range;
-    const hy=att.y - 86;
-    const dx=def.x;
-    const dy=def.y - 86;
-    return (dx > hx-w*0.5 && dx < hx+w*0.5 && dy > hy-h*0.5 && dy < hy+h*0.5);
-  }
+  // update cooldowns + status
+  const P=[G.Left,G.Right];
+  for(const p of P){
+    if(p.invul>0) p.invul=Math.max(0,p.invul-dt);
+    if(p.stun>0)  p.stun=Math.max(0,p.stun-dt);
+    if(p.hitT>0)  p.hitT=Math.max(0,p.hitT-dt);
+    if(p.atkT>0)  p.atkT=Math.max(0,p.atkT-dt);
 
-  function spawnPopup(wx,wy,text,crit){ G.fx.popups.push({wx,wy,vy:-320,t:0,life:0.85,text,crit}); }
-  function spawnSlash(wx,wy,dir,kind){
-    const n=(kind==="ult")?4:(kind==="skill"?3:2);
-    for(let i=0;i<n;i++){
-      G.fx.slashes.push({wx,wy,dir,kind,t:0,life:(kind==="ult")?0.24:0.17,rot:(-0.8+i*0.24)+(Math.random()-0.5)*0.2,len:((kind==="ult")?320:(kind==="skill")?260:220)*(0.85+Math.random()*0.25),w:((kind==="ult")?12:(kind==="skill")?9:7)*(0.85+Math.random()*0.25)});
-    }
-  }
-  function spawnSparks(wx,wy,dir,power){
-    const count = power==="ult"?28:power==="skill"?18:12;
-    for(let i=0;i<count;i++){
-      const a=Math.random()*Math.PI*2;
-      const spd=(power==="ult"?1100:power==="skill"?860:650)*(0.5+Math.random()*0.6);
-      G.fx.sparks.push({wx,wy,vx:Math.cos(a)*spd + dir*(power==="ult"?200:120),vy:Math.sin(a)*spd - (power==="ult"?320:220),t:0,life:power==="ult"?0.55:0.42,s:2+Math.random()*2});
-    }
-  }
-  function spawnAfterImage(f,strength){ G.fx.afterImgs.push({wx:f.x,wy:f.y,face:f.face,t:0,life:0.18,a:clamp(strength,0.25,0.9)}); }
-  function spawnSmoke(wx,wy,power){
-    const n = power==="big"?18:10;
-    for(let i=0;i<n;i++){
-      const a=Math.random()*Math.PI*2;
-      const spd=(power==="big"?820:520)*(0.4+Math.random()*0.8);
-      G.fx.smokes.push({wx,wy,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-(power==="big"?360:240),t:0,life:power==="big"?0.55:0.38,r:12+Math.random()*18,grow:(power==="big"?64:44)*(0.7+Math.random()*0.6)});
-    }
-  }
+    p.cdAtk=Math.max(0,p.cdAtk-dt);
+    p.cdDash=Math.max(0,p.cdDash-dt);
+    p.cdS1=Math.max(0,p.cdS1-dt);
+    p.cdS2=Math.max(0,p.cdS2-dt);
+    p.cdUlt=Math.max(0,p.cdUlt-dt);
 
-  function applyHit(att, def, baseMul, power){
-    if(def.invul>0) return false;
-    const range = power==="atk"?175: power==="skill"?240:210;
-    const w = power==="atk"?150: power==="skill"?220:190;
-    const h = power==="atk"?120: power==="skill"?150:140;
-    if(!rectHit(att,def,range,w,h)) return false;
-
-    const roll=rollDamage(att.char);
-    const dmg=Math.floor(roll.dmg*baseMul);
-
-    def.hp=Math.max(0,def.hp-dmg);
-    def.stun=Math.max(def.stun, power==="ult"?0.26:power==="skill"?0.20:0.16);
-    def.invul=Math.max(def.invul, power==="ult"?0.16:power==="skill"?0.12:0.10);
-
-    const dir=att.face;
-    def.vx = dir*(power==="ult"?620:power==="skill"?520:420);
-    def.vy = -(power==="ult"?620:power==="skill"?520:420);
-
-    spawnPopup(def.x, def.y-120, String(dmg), roll.crit);
-    spawnSlash(def.x, def.y-90, dir, power==="ult"?"ult":(power==="skill"?"skill":"atk"));
-    spawnSparks(def.x, def.y-92, dir, power==="ult"?"ult":(power==="skill"?"skill":"atk"));
-
-    startShake(0.06, power==="ult"?18:power==="skill"?14:12);
-    startFlash(power==="ult"?0.45:0.22, power==="ult"?0.09:0.06);
-
-    att.hitstop=Math.max(att.hitstop, power==="ult"?0.05:0.04);
-    def.hitstop=Math.max(def.hitstop, power==="ult"?0.03:0.024);
-
-    att.en = clamp(att.en + (roll.crit?10:7), 0, 100);
-    return true;
-  }
-
-  function applyGround(f){ if(f.y>=0){ f.y=0; f.vy=0; } }
-
-  function doJump(f){
-    if(f.lock>0||f.stun>0) return;
-    if(f.y===0){ f.vy=-f.jump; f.state="jump"; f.t=0; }
-  }
-  function doDash(f, dir){
-    if(f.lock>0||f.stun>0) return;
-    if(f.cdDash>0) return;
-    f.cdDash=0.60; f.invul=Math.max(f.invul,0.12);
-    f.lock=0.08; f.state="dash"; f.t=0;
-    const d = Math.abs(dir)>0.2 ? sign(dir) : f.face;
-    f.face=d;
-    f.vx = d*f.dashSpd;
-    f.vy *= 0.10;
-    startShake(0.05,10);
-  }
-  function doAttack(f){
-    if(f.lock>0||f.stun>0) return;
-    if(f.atkCd>0) return;
-    f.atkCd=0.14;
-    if(f.comboT<=0) f.combo=0;
-    f.comboT=0.85;
-    f.combo=(f.combo+1)%3;
-    f.lock=0.22 + f.combo*0.02;
-    f.state="atk"; f.t=0; f.didHit=false;
-  }
-  function doSkill1(f){
-    if(f.lock>0||f.stun>0||f.cdS1>0||f.en<20) return;
-    f.en-=20; f.cdS1=1.2; f.lock=0.38; f.state="s1"; f.t=0; f.didHit=false;
-    startFlash(0.18,0.05);
-  }
-  function doSkill2(f){
-    if(f.lock>0||f.stun>0||f.cdS2>0||f.en<25) return;
-    f.en-=25; f.cdS2=1.5; f.lock=0.46; f.state="s2"; f.t=0; f.didHit=false;
-    startFlash(0.18,0.05);
-  }
-  function doSub(f){
-    if(f.lock>0||f.stun>0||f.cdSub>0||f.en<15) return;
-    f.en-=15; f.cdSub=0.9; f.lock=0.28; f.state="sub"; f.t=0; f.didHit=false;
-  }
-  function doUlt(f, def){
-    if(f.lock>0||f.stun>0||f.cdUlt>0||f.en<100) return;
-    f.en=0; f.cdUlt=3.0; f.lock=0.95; f.state="ult"; f.t=0;
-    f.ult={tele:false, idx:0, hits:[0.20,0.33,0.47,0.62]};
-    startFlash(0.45,0.10); startShake(0.07,18);
-  }
-
-  function updateFighter(f, def, dt, inp, edge){
-    f.lock=Math.max(0,f.lock-dt);
-    f.stun=Math.max(0,f.stun-dt);
-    f.invul=Math.max(0,f.invul-dt);
-
-    f.cdDash=Math.max(0,f.cdDash-dt);
-    f.cdS1=Math.max(0,f.cdS1-dt);
-    f.cdS2=Math.max(0,f.cdS2-dt);
-    f.cdUlt=Math.max(0,f.cdUlt-dt);
-    f.cdSub=Math.max(0,f.cdSub-dt);
-    f.atkCd=Math.max(0,f.atkCd-dt);
-    f.comboT=Math.max(0,f.comboT-dt);
-
-    if(f.hitstop>0){ f.hitstop=Math.max(0,f.hitstop-dt); return; }
-
-    const jumpOnce=edge("jump", inp.jump);
-    const atkOnce =edge("atk",  inp.atk);
-    const dashOnce=edge("dash", inp.dash);
-    const s1Once  =edge("s1",   inp.s1);
-    const s2Once  =edge("s2",   inp.s2);
-    const ultOnce =edge("ult",  inp.ult);
-    const subOnce =edge("sub",  inp.sub);
-
-    if(Math.abs(inp.mx)>0.2 && f.stun<=0 && f.state!=="ult") f.face = inp.mx>0?1:-1;
-
-    if(jumpOnce) doJump(f);
-    if(dashOnce) doDash(f, inp.mx);
-    if(atkOnce)  doAttack(f);
-    if(s1Once)   doSkill1(f);
-    if(s2Once)   doSkill2(f);
-    if(subOnce)  doSub(f);
-    if(ultOnce)  doUlt(f, def);
-
-    let slow=1;
-    if(f.state==="atk") slow=0.62;
-    if(f.state==="s1"||f.state==="s2"||f.state==="sub") slow=0.45;
-    if(f.state==="ult") slow=0.0;
-    if(f.stun>0) slow=0.0;
-
-    const accel=3300;
-    const target = inp.mx*(f.move*slow);
-    f.vx = lerp(f.vx, target, 1 - Math.exp(-accel*dt/Math.max(260,f.move)));
-    if(Math.abs(inp.mx)<0.08) f.vx*=0.86;
-
-    f.vy += 2600*dt;
-    f.x += f.vx*dt; f.y += f.vy*dt;
-    applyGround(f);
-
-    if(f.hp<=0){ f.state="dead"; return; }
-    if(f.stun>0) f.state="stun";
-    else if(f.state==="ult") f.state="ult";
-    else if(f.lock>0 && ["atk","dash","s1","s2","sub"].includes(f.state)) {}
-    else if(f.y<0) f.state=(f.vy<0)?"jump":"fall";
-    else if(Math.abs(inp.mx)>0.15) f.state="run";
-    else f.state="idle";
-
-    // ATK hit window
-    if(f.state==="atk"){
-      const w0=0.06+f.combo*0.01, w1=0.14+f.combo*0.015;
-      if(!f.didHit && f.t>=w0 && f.t<=w1) if(applyHit(f,def,1.0,"atk")) f.didHit=true;
-    }
-
-    // S1 cross-slash
-    if(f.state==="s1"){
-      if(f.t < 0.22) spawnAfterImage(f, 0.55);
-      if(!f.didHit && f.t>=0.10 && f.t<=0.16){
-        if(applyHit(f,def,1.10,"skill")) f.didHit=true;
-      }
-      if(f.t>=0.18 && f.t<=0.24){
-        applyHit(f,def,0.92,"skill");
-        spawnSlash(def.x, def.y-92, f.face, "skill");
-        spawnSparks(def.x, def.y-94, f.face, "skill");
+    // burn DOT tick mỗi 0.1s
+    if(p.burnT>0 && !p.dead){
+      p.burnT=Math.max(0,p.burnT-dt);
+      p.burnTick += dt;
+      while(p.burnTick>=0.10){
+        p.burnTick -= 0.10;
+        const d = rndi(p.burnDpsMin, p.burnDpsMax);
+        p.hp = Math.max(0, p.hp - d);
+        addPopup(G, p.x, p.y-95, String(d), false);
+        if(p.hp<=0){ p.dead=true; p.stun=999; G.phase="ko"; G.midText="KO!"; break; }
       }
     }
+  }
 
-    // S2 shadow step/backstab
-    if(f.state==="s2"){
-      if(f.t>=0.10 && f.t<0.12){
-        const d=sign(def.x-f.x)||f.face; f.face=d;
-        spawnSmoke(f.x, f.y-40, "small");
-        f.x = def.x - d*240;
-        f.invul=Math.max(f.invul,0.14);
-        spawnSmoke(f.x, f.y-40, "big");
-        startFlash(0.28,0.06);
-        startShake(0.06,16);
-        spawnSlash(def.x, def.y-98, d, "ult");
-      }
-      if(!f.didHit && f.t>=0.14 && f.t<=0.30){
-        if(applyHit(f,def,1.25,"skill")) f.didHit=true;
+  // update fx lifetimes
+  tickFX(G, dt);
+
+  // physics + actions
+  updateFighter(G, G.Left, G.Right, dt, inpL);
+  updateFighter(G, G.Right, G.Left, dt, inpR);
+
+  // camera follow 2 players + zoom limit + map bounds constraint
+  updateCamera(G, dt);
+
+  // clamp players in world
+  for(const p of P){
+    p.x = clamp(p.x, G.WORLD.left, G.WORLD.right);
+    // floor
+    if(p.y>=G.WORLD.floor){
+      p.y=G.WORLD.floor;
+      p.vy=0;
+      if(!p.grounded){
+        p.grounded=true;
+        p.jumpCount=0;
       }
     }
+  }
+}
 
-    // SUB feint
-    if(f.state==="sub"){
-      if(f.t<0.12) spawnAfterImage(f, 0.45);
-      if(f.t>=0.06 && f.t<0.08){
-        f.x += f.face*90;
-        spawnSmoke(f.x, f.y-40, "small");
-      }
-      if(!f.didHit && f.t>=0.08 && f.t<=0.16){
-        if(applyHit(f,def,0.88,"skill")) f.didHit=true;
-      }
+function tickFX(G,dt){
+  for(const s of G.fx.slashes) s.t+=dt;
+  for(const sp of G.fx.sparks) sp.t+=dt;
+  for(const d of G.fx.popups) d.t+=dt;
+  for(const z of G.fx.sprites) z.t+=dt;
+
+  G.fx.slashes = G.fx.slashes.filter(x=>x.t<x.life);
+  G.fx.sparks  = G.fx.sparks.filter(x=>x.t<x.life);
+  G.fx.popups  = G.fx.popups.filter(x=>x.t<x.life);
+  G.fx.sprites = G.fx.sprites.filter(x=>x.t<x.life);
+}
+
+function updateFighter(G, self, foe, dt, inp){
+  if(self.dead) return;
+
+  // face each other (classic fighter)
+  if(foe && !foe.dead){
+    self.face = (foe.x>=self.x) ? 1 : -1;
+  }
+
+  // movement tuning (model nhỏ)
+  const runSpeed = 260;           // world units/s
+  const accel = 2400;
+  const friction = 2200;
+  const gravity = 1850;           // nhỏ -> đỡ bay
+  const jumpV = 620;              // nhảy thấp hơn
+  const doubleJumpV = 560;
+
+  // action lock: bị stun thì không act
+  const canAct = (self.stun<=0) && (G.phase==="fight");
+
+  // horizontal movement (bị chậm khi đang đánh)
+  const attacking = self.atkT>0;
+  const moveMul = attacking ? 0.55 : 1.0;
+
+  const targetVx = clamp(inp.mx, -1, 1) * runSpeed * moveMul;
+  const dv = targetVx - self.vx;
+  const a = (Math.abs(targetVx)>0.01) ? accel : friction;
+  self.vx += clamp(dv, -a*dt, a*dt);
+
+  // dash (teleport-like, nhưng vẫn “dash anim”)
+  if(canAct && inp.dash && self.cdDash<=0){
+    self.cdDash = 0.55;
+    self.invul = Math.max(self.invul, 0.10);
+    const dashDist = 185;
+    const dir = self.face;
+    self.x += dir * dashDist;
+    self.vx = dir * 520;
+    addSlash(G, self.x + dir*30, self.y-60, "dash");
+    G.shake = Math.max(G.shake||0, 2.0);
+    G.shakeT = Math.max(G.shakeT||0, 0.08);
+  }
+
+  // jump + double jump
+  if(canAct && inp.jump){
+    if(self.grounded){
+      self.grounded=false;
+      self.vy = -jumpV;
+      self.jumpCount=1;
+    }else if(self.jumpCount<2){
+      self.vy = -doubleJumpV;
+      self.jumpCount++;
+      addSparks(G, self.x, self.y-40, 6);
     }
+  }
 
-    // ULT cinematic multi slash
-    if(f.state==="ult" && f.ult){
-      if(f.t < 0.75) spawnAfterImage(f, 0.85);
+  // gravity
+  if(!self.grounded){
+    self.vy += gravity*dt;
+    self.y += self.vy*dt;
+  }
 
-      if(!f.ult.tele && f.t>=0.10){
-        const d=sign(def.x-f.x)||f.face; f.face=d;
-        spawnSmoke(def.x - d*220, def.y-40, "big");
-        startFlash(0.55,0.08);
-        startShake(0.08,22);
-        f.x = def.x - d*210;
-        f.invul=Math.max(f.invul,0.22);
-        f.ult.tele=true;
-        spawnSlash(def.x, def.y-110, d, "ult");
-        spawnSparks(def.x, def.y-110, d, "ult");
-      }
+  // apply vx
+  self.x += self.vx*dt;
 
-      while(f.ult.idx < f.ult.hits.length && f.t >= f.ult.hits[f.ult.idx]){
-        const d=sign(def.x-f.x)||f.face; f.face=d;
-        const jitter=(f.ult.idx%2===0)?36:-36;
-        f.x = def.x - d*200 + jitter;
+  // normal attack (stun nhẹ + knock nhỏ)
+  if(canAct && inp.atk && self.cdAtk<=0){
+    self.cdAtk = 0.28;
+    self.atkT = 0.18;
+    self.atkKind = (Math.random()<0.5)?1:2;
 
-        spawnSlash(def.x, def.y-112, d, "ult");
-        spawnSlash(def.x, def.y-96, d, "ult");
-        spawnSparks(def.x, def.y-110, d, "ult");
-        spawnSmoke(def.x, def.y-40, "small");
+    addSlash(G, self.x + self.face*70, self.y-62, "atk");
+    tryHitMelee(G, self, foe, { dmgMin:200, dmgMax:350, critChance:0.10, critMin:400, critMax:450,
+      range:120, stun:0.09, kx:95, ky:40 });
+  }
 
-        applyHit(f,def,1.45,"ult");
+  // Skill 1: fireball short range + burn
+  if(canAct && inp.s1 && self.cdS1<=0){
+    self.cdS1 = 1.35;
+    self.atkT = 0.22;
+    // spawn projectile
+    spawnFireball(G, self);
+  }
 
-        startFlash(0.38,0.05);
-        startShake(0.06,20);
+  // Skill 2: ground blast at feet (knockup + stun longer)
+  if(canAct && inp.s2 && self.cdS2<=0){
+    self.cdS2 = 1.85;
+    self.atkT = 0.28;
+    spawnBlast(G, self, foe);
+  }
 
-        f.ult.idx++;
-      }
-      if(f.t>=0.90 && f.lock<=0) f.ult=null;
+  // ULT cinematic: nhẹ nhưng ngầu
+  if(canAct && inp.ult && self.cdUlt<=0 && self.en>=100){
+    self.en = 0;
+    self.cdUlt = 7.5;
+    startUlt(G, self, foe);
+  }
+}
+
+function tryHitMelee(G, self, foe, cfg){
+  if(!foe || foe.dead) return;
+  const dx = foe.x - self.x;
+  const adx = Math.abs(dx);
+  if(adx>cfg.range) return;
+
+  // facing check
+  if(Math.sign(dx) !== Math.sign(self.face)) return;
+
+  // dmg + crit
+  let dmg = rndi(cfg.dmgMin, cfg.dmgMax);
+  const crit = Math.random()<cfg.critChance;
+  if(crit) dmg = rndi(cfg.critMin, cfg.critMax);
+
+  applyHit(G, self, foe, dmg, { stun:cfg.stun, kx:cfg.kx, ky:cfg.ky, enGain:12 });
+}
+
+function spawnFireball(G, self){
+  const dir = self.face;
+  const speed = 620;
+  const travel = 260; // đoạn ngắn
+  const startX = self.x + dir*70;
+  const endX = startX + dir*travel;
+
+  // fx sprite kind s1
+  addSpriteFX(G, "s1", startX, self.y-70, dir, 1.0, 0.55);
+
+  // projectile object stored in fx.sprites as moving bullet
+  // -> reuse sprites array with extra fields
+  const z = G.fx.sprites[G.fx.sprites.length-1];
+  z.vx = dir*speed;
+  z.startX = startX;
+  z.endX = endX;
+  z.hit = false;
+  z.life = 0.75;
+
+  // hit check in server tick: do it here by approximate continuous
+  // We will check in render-independent step by scanning sprites in tickFX-like:
+  // simplest: do immediate line hit if foe in path (short)
+  const foe = (self===G.Left)?G.Right:G.Left;
+  if(!foe || foe.dead) return;
+
+  // if foe within segment ahead
+  const minX = Math.min(startX,endX)-30;
+  const maxX = Math.max(startX,endX)+30;
+  if(foe.x>=minX && foe.x<=maxX && Math.abs((foe.y)-(self.y))<40){
+    // apply hit with small delay feel
+    const dmg = rndi(2000,2500);
+    applyHit(G, self, foe, dmg, { stun:0.16, kx:140, ky:120, enGain:22 });
+    startBurn(foe, 2.0);
+    addPopup(G, foe.x, foe.y-120, "BURN", false);
+    z.hit = true;
+    z.life = 0.28;
+  }
+}
+
+function spawnBlast(G, self, foe){
+  // play sprite at feet
+  addSpriteFX(G, "s2", self.x, self.y-10, 1, 1.0, 0.60);
+
+  // AoE circle radius
+  const r = 150;
+  if(!foe || foe.dead) return;
+  const dx = foe.x - self.x;
+  const adx = Math.abs(dx);
+  if(adx>r) return;
+
+  const dmg = rndi(2000,3000);
+  // stronger stun/knockup than normal hit
+  applyHit(G, self, foe, dmg, { stun:0.35, kx:120, ky:540, enGain:28 });
+  G.shake = Math.max(G.shake||0, 4.2);
+  G.shakeT = Math.max(G.shakeT||0, 0.12);
+}
+
+function startUlt(G, self, foe){
+  // cinematic: slow + flash + 3 hits cone
+  G.flash = Math.max(G.flash||0, 0.35);
+  G.vignette = Math.max(G.vignette||0, 1.0);
+  G.shake = Math.max(G.shake||0, 6.0);
+  G.shakeT = Math.max(G.shakeT||0, 0.18);
+
+  // show ult sprite fx (reuse as glow)
+  addSpriteFX(G, "ult", self.x + self.face*60, self.y-70, self.face, 1.2, 0.85);
+
+  if(!foe || foe.dead) return;
+
+  const baseX = self.x + self.face*90;
+  const inRange = Math.abs(foe.x - self.x) < 220;
+
+  if(inRange){
+    // 3 fast hits, but lightweight
+    const hits = 3;
+    for(let i=0;i<hits;i++){
+      const dmg = rndi(1500,2100);
+      applyHit(G, self, foe, dmg, { stun:0.22, kx:160, ky:240, enGain:0 });
     }
-
-    // animation
-    const clip = f.char.stateToAnim(f.state, f.combo);
-    f.animator.set(clip);
-    f.animator.update(dt);
-
-    f.t += dt;
+    addPopup(G, foe.x, foe.y-140, "ULT", true);
+  }else{
+    // whiff effect only
+    addSlash(G, baseX, self.y-70, "ult");
   }
+}
 
-  function separate(a,b,dt){
-    const minDist=180;
-    const dx=b.x-a.x;
-    const d=Math.abs(dx);
-    if(d < minDist){
-      const push=(minDist-d)*4.0;
-      const dir=dx>=0?1:-1;
-      a.x -= dir*push*0.5*dt;
-      b.x += dir*push*0.5*dt;
-      a.vx*=0.93; b.vx*=0.93;
-    }
-  }
+function updateCamera(G, dt){
+  const a=G.Left, b=G.Right;
+  const mid = (a.x + b.x)*0.5;
+  const dist = Math.abs(a.x - b.x);
 
-  // per-fighter edge tracker
-  function makeEdgeTracker(prefix){
-    const s=new Map();
-    return (k,down)=>{
-      const key=prefix+"_"+k;
-      const prev=s.get(key)||false;
-      if(down && !prev){ s.set(key,true); return true; }
-      if(!down) s.set(key,false);
-      return false;
-    };
-  }
+  // zoom: near -> closer, far -> zoom out (limit)
+  const zTarget = clamp(1.0 - (dist/900)*0.35, 0.70, 1.05);
 
-  function startMatch(seed){
-    G.seed = seed>>>0;
-    G.rng = makeRng(G.seed);
+  // camera X clamp so it doesn't show outside too much
+  const camMin = G.WORLD.left + 320;
+  const camMax = G.WORLD.right - 320;
+  const cx = clamp(mid, camMin, camMax);
 
-    // chọn char cố định (sau này bạn cho chọn ở sảnh)
-    G.Left = Fighter(-1, "assassin");
-    G.Right= Fighter(+1, "assassin");
-
-    G.edgeL = makeEdgeTracker("L");
-    G.edgeR = makeEdgeTracker("R");
-
-    G.camX=0;
-    G.zoom=1; G.zoomTarget=1;
-    G.vignette=0; G.vignetteTarget=0;
-    G.timeScale=1;
-
-    // clear FX
-    for(const k of Object.keys(G.fx)) G.fx[k].length=0;
-  }
-
-  function step(dt, inLeft, inRight){
-    if(!G.Left || !G.Right) return;
-
-    // regen energy
-    G.Left.en = clamp(G.Left.en + dt*10, 0, 100);
-    G.Right.en= clamp(G.Right.en+ dt*10, 0, 100);
-
-    G.camX = lerp(G.camX, (G.Left.x+G.Right.x)/2, 0.08);
-
-    if(G.shakeT>0){ G.shakeT=Math.max(0,G.shakeT-dt); G.shake=lerp(G.shake,0,0.18); }
-    else G.shake=lerp(G.shake,0,0.10);
-
-    if(G.flashT>0){ G.flashT=Math.max(0,G.flashT-dt); G.flash=lerp(G.flash,0,0.22); }
-    else G.flash=lerp(G.flash,0,0.18);
-
-    updateFighter(G.Left, G.Right, dt, inLeft, G.edgeL);
-    updateFighter(G.Right,G.Left, dt, inRight,G.edgeR);
-    separate(G.Left,G.Right,dt);
-
-    const anyUlt =
-      (G.Left.state==="ult" && G.Left.t < 0.95) ||
-      (G.Right.state==="ult" && G.Right.t < 0.95);
-
-    G.zoomTarget = anyUlt ? 1.10 : 1.00;
-    G.vignetteTarget = anyUlt ? 1.00 : 0.00;
-    G.timeScale = anyUlt ? 0.82 : 1.00;
-
-    G.zoom = lerp(G.zoom, G.zoomTarget, 0.12);
-    G.vignette = lerp(G.vignette, G.vignetteTarget, 0.10);
-  }
-
-  return { G, startMatch, step, startShake, startFlash };
+  // smooth
+  G.camX += (cx - G.camX) * (1 - Math.pow(0.001, dt));
+  G.camZoom += (zTarget - G.camZoom) * (1 - Math.pow(0.001, dt));
 }
