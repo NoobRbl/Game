@@ -5,246 +5,177 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Anime Battle Online</title>
   <style>
-    html,body{
-      margin:0;padding:0;height:100%;
-      overflow:hidden;
-      background:#000;
-      overscroll-behavior:none;
-      touch-action:none;              /* chặn gesture */
-      -webkit-user-select:none;
-      user-select:none;
-    }
-    #uiRoot{ position:fixed; inset:0; display:block; }
-    #cv{ position:absolute; inset:0; width:100%; height:100%; display:block; }
-
-    /* Mobile controls */
-    .hud{
-      position:absolute; inset:0; pointer-events:none;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto;
-      color:#fff;
-    }
-    .hint{
-      position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
-      opacity:.65; font-size:12px;
-      text-shadow:0 1px 6px rgba(0,0,0,.8);
-    }
-    .top{
-      position:absolute; left:0; right:0; top:8px;
-      display:flex; justify-content:space-between; align-items:flex-start;
-      padding:0 10px; gap:10px;
-      pointer-events:none;
-    }
-    .panel{
-      width:44%;
-      pointer-events:none;
-    }
-    .nameRow{
-      display:flex; justify-content:space-between; opacity:.9; font-size:12px;
-      margin-bottom:4px;
-      text-shadow:0 1px 6px rgba(0,0,0,.8);
-    }
-    .bar{
-      height:10px; border-radius:999px;
-      background:rgba(255,255,255,.08);
-      overflow:hidden;
-      box-shadow:0 6px 18px rgba(0,0,0,.35);
-    }
-    .fill{ height:100%; width:50%; border-radius:999px; }
-    .hp1{ background:linear-gradient(90deg,#5fe3ff,#5b6bff); }
-    .hp2{ background:linear-gradient(90deg,#ff5f7a,#ffb35b); }
-    .en1{ background:linear-gradient(90deg,#9b5bff,#ff5fb9); }
-    .en2{ background:linear-gradient(90deg,#ffb35b,#ffd45b); }
-
-    .mid{
-      position:absolute; left:50%; top:10px; transform:translateX(-50%);
-      text-align:center; pointer-events:none;
-      text-shadow:0 1px 10px rgba(0,0,0,.85);
-      font-size:13px; opacity:.95;
-      white-space:nowrap;
-    }
-
-    .controls{
-      position:absolute; left:0; right:0; bottom:0;
-      height:46%;
-      pointer-events:none;
-    }
-
-    .joy{
-      position:absolute; left:18px; bottom:22px;
-      width:160px; height:160px;
-      border-radius:999px;
-      background:rgba(255,255,255,.06);
-      box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);
-      pointer-events:auto;
-      touch-action:none;
-    }
-    .stick{
-      position:absolute; left:50%; top:50%;
-      width:74px; height:74px;
-      transform:translate(-50%,-50%);
-      border-radius:999px;
-      background:rgba(255,255,255,.10);
-      box-shadow:0 10px 26px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.10);
-    }
-
-    .btnGrid{
-      position:absolute; right:18px; bottom:22px;
-      width:260px; height:220px;
-      display:grid;
-      grid-template-columns:repeat(3, 1fr);
-      grid-template-rows:repeat(3, 1fr);
-      gap:10px;
-      pointer-events:auto;
-      touch-action:none;
-    }
-    .btn{
-      border-radius:14px;
-      background:rgba(255,255,255,.08);
-      box-shadow:0 14px 28px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.08);
-      display:flex; flex-direction:column;
-      justify-content:center; align-items:center;
-      font-weight:700;
-      user-select:none;
-      -webkit-user-select:none;
-      touch-action:none;
-    }
-    .btn small{ opacity:.75; font-weight:600; margin-top:2px; }
-    .btn:active{ transform:scale(.98); }
-
-    /* lobby overlay */
-    #lobby{
-      position:fixed; inset:0;
-      background:radial-gradient(1200px 600px at 50% 30%, rgba(120,180,255,.18), rgba(0,0,0,.86)),
-                 linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.92));
-      display:flex; align-items:center; justify-content:center;
-      color:#fff;
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;}
+    body{touch-action:none;-webkit-user-select:none;user-select:none;}
+    #cv{position:fixed;inset:0;width:100%;height:100%;}
+    .ui{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto; color:#fff;
+      background:radial-gradient(ellipse at center, rgba(30,40,80,.55), rgba(0,0,0,.9));
     }
     .card{
-      width:min(520px, 92vw);
-      border-radius:22px;
-      background:rgba(255,255,255,.08);
-      box-shadow:0 24px 80px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.08);
-      padding:18px;
+      width:min(520px,92vw);
+      background:rgba(15,18,30,.72);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      padding:16px;
+      backdrop-filter: blur(10px);
     }
-    .title{
-      font-size:18px; font-weight:800; letter-spacing:.4px;
-      margin:4px 0 10px 0;
-    }
-    .row{ display:flex; gap:10px; flex-wrap:wrap; }
-    .pill{
-      padding:10px 12px; border-radius:14px;
-      background:rgba(0,0,0,.35);
-      box-shadow:inset 0 0 0 2px rgba(255,255,255,.06);
+    .row{display:flex;gap:10px;flex-wrap:wrap;}
+    button{
       flex:1;
-      min-width:180px;
-    }
-    .pill label{ display:block; opacity:.75; font-size:12px; margin-bottom:6px; }
-    .pill input{
-      width:100%; padding:10px 12px;
-      border-radius:12px; border:none; outline:none;
       background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
       color:#fff;
-      box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);
-    }
-    .actions{ display:flex; gap:10px; margin-top:12px; }
-    .act{
-      flex:1;
-      padding:12px 14px;
+      padding:12px 12px;
       border-radius:14px;
-      background:linear-gradient(90deg, rgba(95,227,255,.22), rgba(155,91,255,.22));
-      box-shadow:0 18px 50px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.10);
-      text-align:center;
-      font-weight:800;
+      font-weight:700;
       cursor:pointer;
-      user-select:none;
     }
-    .act.secondary{
-      background:rgba(255,255,255,.08);
+    button:active{transform:scale(.98);}
+    input{
+      width:100%;
+      padding:12px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.25);
+      color:#fff;
+      outline:none;
     }
-    .note{ margin-top:10px; opacity:.8; font-size:12px; line-height:1.4; }
-    .status{ margin-top:10px; font-size:13px; opacity:.9; }
+    .hint{opacity:.8;font-size:13px;line-height:1.35}
+    .link{margin-top:10px;word-break:break-all;font-size:13px;opacity:.9}
+    #hud{position:fixed; left:0; right:0; top:0; padding:10px; color:#fff; font-family:system-ui; pointer-events:none;}
   </style>
 </head>
 <body>
-  <div id="uiRoot">
-    <canvas id="cv"></canvas>
+  <canvas id="cv"></canvas>
 
-    <div class="hud">
-      <div class="top">
-        <div class="panel">
-          <div class="nameRow"><span id="p1Name">YOU</span><span id="p1HpTxt">HP</span></div>
-          <div class="bar"><div id="p1Hp" class="fill hp1"></div></div>
-          <div style="height:6px"></div>
-          <div class="bar"><div id="p1En" class="fill en1"></div></div>
-        </div>
-
-        <div class="panel" style="text-align:right">
-          <div class="nameRow"><span id="p2HpTxt">HP</span><span id="p2Name">FOE</span></div>
-          <div class="bar"><div id="p2Hp" class="fill hp2" style="margin-left:auto"></div></div>
-          <div style="height:6px"></div>
-          <div class="bar"><div id="p2En" class="fill en2" style="margin-left:auto"></div></div>
-        </div>
-      </div>
-
-      <div class="mid" id="midTxt">—</div>
-
-      <div class="controls">
-        <div id="joyL" class="joy"><div id="stickL" class="stick"></div></div>
-        <div class="btnGrid">
-          <div class="btn" id="bUlt">ULT <small>O</small></div>
-          <div class="btn" id="bJump">JUMP <small>K</small></div>
-          <div class="btn" id="bS2">S2 <small>I</small></div>
-
-          <div class="btn" id="bSub">SUB <small>P</small></div>
-          <div class="btn" id="bS1">S1 <small>U</small></div>
-          <div class="btn" id="bDash">DASH <small>L</small></div>
-
-          <div class="btn" id="bAtk" style="grid-column: 2 / span 2;">ATK <small>J</small></div>
-        </div>
-
-        <div class="hint">WASD / Joystick • ATK J • JUMP K • DASH L • S1 U • S2 I • ULT O • SUB P</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Lobby -->
-  <div id="lobby">
+  <div id="menu" class="ui">
     <div class="card">
-      <div class="title">Anime Battle Online</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Anime Battle Online</div>
+      <div class="hint">Host tạo phòng → Gen Link → gửi link cho bạn. Bạn mở link là vào luôn.</div>
+
+      <div style="height:12px"></div>
+
       <div class="row">
-        <div class="pill">
-          <label>Room code (hoặc để trống rồi Host)</label>
-          <input id="roomInp" placeholder="VD: EN2RK4" />
-        </div>
+        <button id="btnHost">HOST</button>
+        <button id="btnGen">GEN LINK</button>
       </div>
-      <div class="actions">
-        <div class="act" id="btnHost">HOST + GEN LINK</div>
-        <div class="act secondary" id="btnJoin">JOIN</div>
+
+      <div style="height:10px"></div>
+
+      <input id="joinInput" placeholder="Dán link hoặc nhập code (ABCDE) rồi bấm JOIN" />
+      <div style="height:10px"></div>
+
+      <div class="row">
+        <button id="btnJoin">JOIN</button>
+        <button id="btnCopy" style="flex:0.7">COPY LINK</button>
       </div>
-      <div class="note">
-        Host sẽ tạo link có dạng <b>#ROOM=XXXX</b> — gửi link đó cho bạn bè là vào luôn (không cần nhập lại).
-      </div>
-      <div class="status" id="lobStatus">Chờ…</div>
+
+      <div id="out" class="link"></div>
     </div>
   </div>
 
-  <script>
-    // chặn double tap / pinch zoom
-    (function disableZoom(){
-      let lastTouchEnd = 0;
-      document.addEventListener('touchend', function(e){
-        const now = Date.now();
-        if (now - lastTouchEnd <= 300) e.preventDefault();
-        lastTouchEnd = now;
-      }, { passive:false });
-      document.addEventListener('dblclick', (e)=>e.preventDefault(), { passive:false });
-      document.addEventListener('gesturestart', (e)=>e.preventDefault(), { passive:false });
-      document.addEventListener('touchmove', (e)=>{
-        if (e.touches && e.touches.length > 1) e.preventDefault();
-      }, { passive:false });
-    })();
-  </script>
+  <div id="hud"></div>
 
-  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    // ✅ chặn double-tap zoom + pinch zoom
+    let lastTap = 0;
+    addEventListener("touchend", (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) e.preventDefault();
+      lastTap = now;
+    }, { passive:false });
+    addEventListener("gesturestart", (e)=>e.preventDefault(), { passive:false });
+
+    import { startClient } from "../src/main_client.js";
+
+    const $ = (id)=>document.getElementById(id);
+    const menu = $("menu");
+    const out = $("out");
+    const joinInput = $("joinInput");
+
+    let lastLink = "";
+
+    function parseHashRoom() {
+      const h = location.hash || "";
+      const m = h.match(/ROOM=([A-Z0-9]{4,8})/i);
+      return m ? m[1].toUpperCase() : "";
+    }
+
+    function normalizeJoinValue(v) {
+      v = (v||"").trim();
+      // nếu user dán cả link -> lấy ROOM=
+      const m = v.match(/ROOM=([A-Z0-9]{4,8})/i);
+      if (m) return m[1].toUpperCase();
+      // nếu chỉ code
+      if (/^[A-Z0-9]{4,8}$/i.test(v)) return v.toUpperCase();
+      return "";
+    }
+
+    async function createRoom() {
+      const r = await fetch("/api/room", { method:"POST", headers:{ "Content-Type":"application/json" } });
+      const j = await r.json();
+      if (!j.ok) throw new Error("Create room failed");
+      return j.code;
+    }
+
+    async function hostAndJoin(code) {
+      // start game client join room
+      menu.style.display = "none";
+      await startClient({ code });
+    }
+
+    $("btnHost").onclick = async () => {
+      // Host chỉ “vào mode host”, Gen mới tạo code
+      out.textContent = "Bấm GEN LINK để tạo phòng...";
+    };
+
+    $("btnGen").onclick = async () => {
+      try {
+        const code = await createRoom();
+        const link = `${location.origin}/#ROOM=${code}`;
+        lastLink = link;
+        out.textContent = "LINK PHÒNG: " + link;
+
+        // set hash để ai mở link auto join
+        location.hash = `#ROOM=${code}`;
+
+        // auto join as host
+        await hostAndJoin(code);
+      } catch (e) {
+        out.textContent = "Lỗi Gen Link: " + (e?.message || e);
+      }
+    };
+
+    $("btnCopy").onclick = async () => {
+      if (!lastLink) { out.textContent = "Chưa có link, bấm GEN LINK trước."; return; }
+      try {
+        await navigator.clipboard.writeText(lastLink);
+        out.textContent = "Đã copy link ✅";
+      } catch {
+        // fallback
+        joinInput.value = lastLink;
+        joinInput.select();
+        document.execCommand("copy");
+        out.textContent = "Đã copy (fallback) ✅";
+      }
+    };
+
+    $("btnJoin").onclick = async () => {
+      const code = normalizeJoinValue(joinInput.value || parseHashRoom());
+      if (!code) { out.textContent = "Bạn hãy dán link hoặc nhập code đúng (vd: ABCDE)."; return; }
+      location.hash = `#ROOM=${code}`;
+      menu.style.display = "none";
+      await startClient({ code });
+    };
+
+    // auto join nếu mở bằng link
+    const auto = parseHashRoom();
+    if (auto) {
+      menu.style.display = "none";
+      startClient({ code: auto });
+    }
+  </script>
 </body>
 </html>
