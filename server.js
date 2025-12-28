@@ -16,6 +16,7 @@ app.use(express.json());
 
 // ✅ serve public
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/src", express.static(path.join(__dirname, "src")));
 
 // ✅ FIX Cannot GET /
 app.get("/", (req, res) => {
