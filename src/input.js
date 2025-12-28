@@ -1,3 +1,4 @@
+// src/input.js
 export function setupInput(){
   const keys = new Set();
   addEventListener("keydown",(e)=>keys.add(e.key.toLowerCase()),{passive:true});
@@ -7,8 +8,9 @@ export function setupInput(){
 
   const bindBtn=(id,name)=>{
     const el=document.getElementById(id);
-    el.addEventListener("pointerdown",(e)=>{e.preventDefault(); touch[name]=true;},{passive:false});
-    const up=(e)=>{e.preventDefault(); touch[name]=false;};
+    const down=(e)=>{ e.preventDefault(); touch[name]=true; };
+    const up=(e)=>{ e.preventDefault(); touch[name]=false; };
+    el.addEventListener("pointerdown",down,{passive:false});
     el.addEventListener("pointerup",up,{passive:false});
     el.addEventListener("pointercancel",up,{passive:false});
     el.addEventListener("pointerleave",up,{passive:false});
@@ -52,13 +54,6 @@ export function setupInput(){
   })();
 
   const makeInput=()=>({mx:0, atk:false, jump:false, dash:false, s1:false, s2:false, ult:false, sub:false});
-  const edgeState=new Map();
-  const once=(k,down)=>{
-    const prev=edgeState.get(k)||false;
-    if(down && !prev){ edgeState.set(k,true); return true; }
-    if(!down) edgeState.set(k,false);
-    return false;
-  };
 
   function readLocalInput(){
     const inp=makeInput();
@@ -68,6 +63,7 @@ export function setupInput(){
     x += joyVec.x*1.05;
     inp.mx = Math.max(-1, Math.min(1, x));
 
+    // mapping: ATK J, JUMP K, DASH L, S1 U, S2 I, ULT O, SUB P
     inp.atk  = keys.has("j") || touch.atk;
     inp.jump = keys.has("k") || touch.jump;
     inp.dash = keys.has("l") || touch.dash;
@@ -79,5 +75,5 @@ export function setupInput(){
     return inp;
   }
 
-  return { readLocalInput, once, makeInput };
+  return { readLocalInput, makeInput };
 }
