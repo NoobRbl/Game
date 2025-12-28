@@ -1,176 +1,120 @@
+// src/main.js
 import { setupInput } from "./input.js";
-import { setupNet } from "./net.js";
 import { setupRender } from "./render.js";
+import { createNetClient } from "./net.js";
+import { createGameState } from "./game.js";
 
-const hud = document.getElementById("hud");
-const info = document.getElementById("info");
-const Lhp = document.getElementById("Lhp");
-const Rhp = document.getElementById("Rhp");
-const Len = document.getElementById("Len");
-const Ren = document.getElementById("Ren");
+const $ = (id)=>document.getElementById(id);
 
-function updateHUD(state, ping) {
-  if (!state?.L || !state?.R) return;
-  Lhp.style.transform = `scaleX(${state.L.hp / state.L.hpMax})`;
-  Rhp.style.transform = `scaleX(${state.R.hp / state.R.hpMax})`;
-  Len.style.transform = `scaleX(${state.L.en / state.L.enMax})`;
-  Ren.style.transform = `scaleX(${state.R.en / state.R.enMax})`;
-  info.textContent = `FIGHT • ping: ${Math.round(ping)}ms • HP: ${state.L.hp}/${state.L.hpMax} vs ${state.R.hp}/${state.R.hpMax}`;
+const lobby = $("lobby");
+const roomInp = $("roomInp");
+const btnHost = $("btnHost");
+const btnJoin = $("btnJoin");
+const lobStatus = $("lobStatus");
+
+const p1Hp = $("p1Hp"), p2Hp = $("p2Hp");
+const p1En = $("p1En"), p2En = $("p2En");
+const p1HpTxt = $("p1HpTxt"), p2HpTxt = $("p2HpTxt");
+const p1Name = $("p1Name"), p2Name = $("p2Name");
+const midTxt = $("midTxt");
+
+function genRoom(){
+  const chars="ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s="";
+  for(let i=0;i<6;i++) s += chars[(Math.random()*chars.length)|0];
+  return s;
 }
 
-(function boot() {
-  const input = setupInput();
-  const net = setupNet();
-  const render = setupRender();
+function parseHashRoom(){
+  const m = (location.hash||"").match(/ROOM=([A-Z0-9]+)/i);
+  return m ? m[1].toUpperCase() : "";
+}
 
-  const G = {
-    seed: 0,
-    camX: 0,
-    zoom: 1,
-    vignette: 0,
-    shake: 0,
-    shakeT: 0,
-    flash: 0,
-    flashT: 0,
-    fx: { popups: [], slashes: [], sparks: [] },
-    Left: null,
-    Right: null
-  };
+const net = createNetClient();
+const input = setupInput();
+const render = setupRender();
 
-  function spawnPopup(wx, wy, text, crit) {
-    G.fx.popups.push({ wx, wy: wy - 120, vy: -260, t: 0, life: 0.70, text, crit });
+// local state mirrored from server
+let G = createGameState();
+let lastStateAt = performance.now();
+let lastPing = 0;
+
+net.setHandlers({
+  onInfo:(info)=>{
+    if(info.type==="status") lobStatus.textContent = info.text;
+    if(info.type==="welcome"){
+      lobStatus.textContent = `Joined room ${info.room} as slot ${info.slot===0?"P1":"P2"}`;
+      // hide lobby when both ready will happen from server state
+    }
+  },
+  onState:(state)=>{
+    G = state;
+    lastStateAt = performance.now();
+    // lobby hide when phase != lobby
+    if(G.phase!=="lobby") lobby.style.display="none";
   }
-  function spawnSlash(wx, wy, power) {
-    const count = power === "ult" ? 2 : 1;
-    for (let i = 0; i < count; i++) {
-      G.fx.slashes.push({
-        wx, wy: wy - 90,
-        kind: power,
-        t: 0,
-        life: power === "ult" ? 0.18 : 0.14,
-        rot: (-0.6 + i * 0.25) + (Math.random() - 0.5) * 0.2,
-        len: power === "ult" ? 280 : 220,
-        w: power === "ult" ? 10 : 7
-      });
-    }
+});
+
+function startJoin(room){
+  net.connect(room);
+}
+
+btnHost.onclick=()=>{
+  const r = genRoom();
+  location.hash = `#ROOM=${r}`;
+  roomInp.value = r;
+  startJoin(r);
+
+  // show link to copy (simple)
+  const link = location.href;
+  lobStatus.textContent = `HOST OK • Link: ${link}`;
+};
+
+btnJoin.onclick=()=>{
+  const r = (roomInp.value||parseHashRoom()||"").trim().toUpperCase();
+  if(!r){ lobStatus.textContent="Nhập ROOM hoặc bấm Host."; return; }
+  location.hash = `#ROOM=${r}`;
+  startJoin(r);
+};
+
+(function autoJoinIfHash(){
+  const r = parseHashRoom();
+  if(r){
+    roomInp.value=r;
+    startJoin(r);
   }
-  function spawnSparks(wx, wy, power) {
-    const count = power === "ult" ? 10 : 6;
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const spd = (power === "ult" ? 820 : 620) * (0.5 + Math.random() * 0.6);
-      G.fx.sparks.push({
-        wx,
-        wy: wy - 96,
-        vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd - 220,
-        t: 0,
-        life: 0.36,
-        s: 2 + Math.random() * 2
-      });
-    }
-  }
+})();
 
-  net.setHandlers({
-    onStart({ seed }) {
-      G.seed = seed >>> 0;
-      G.fx.popups.length = 0;
-      G.fx.slashes.length = 0;
-      G.fx.sparks.length = 0;
-    },
-    onState(msg) {
-      const s = msg.s;
-      G.Left = s.L;
-      G.Right = s.R;
+function hud(){
+  if(!G || !G.Left || !G.Right) return;
 
-      G.camX = (G.Left.x + G.Right.x) * 0.5;
+  p1Name.textContent = G.Left.name || "YOU";
+  p2Name.textContent = G.Right.name || "FOE";
 
-      const anyUlt = (G.Left.state === "ult" || G.Right.state === "ult");
-      G.zoom = anyUlt ? 1.07 : 1.0;
-      G.vignette = anyUlt ? 0.7 : 0.0;
+  p1HpTxt.textContent = `HP: ${Math.round(G.Left.hp)}/${Math.round(G.Left.hpMax)}`;
+  p2HpTxt.textContent = `HP: ${Math.round(G.Right.hp)}/${Math.round(G.Right.hpMax)}`;
 
-      for (const e of (msg.events || [])) {
-        if (e.t === "hit") {
-          spawnPopup(e.x, e.y, String(e.dmg), e.crit);
-          spawnSlash(e.x, e.y, e.power);
-          spawnSparks(e.x, e.y, e.power);
+  p1Hp.style.width = `${(G.Left.hp / G.Left.hpMax)*100}%`;
+  p2Hp.style.width = `${(G.Right.hp / G.Right.hpMax)*100}%`;
 
-          G.shakeT = Math.max(G.shakeT, 0.05);
-          G.shake = Math.max(G.shake, e.power === "ult" ? 14 : 10);
-          G.flashT = Math.max(G.flashT, 0.05);
-          G.flash = Math.max(G.flash, e.power === "ult" ? 0.18 : 0.10);
-        }
-      }
+  p1En.style.width = `${(G.Left.en / G.Left.enMax)*100}%`;
+  p2En.style.width = `${(G.Right.en / G.Right.enMax)*100}%`;
 
-      updateHUD(s, net.NET.ping);
-      hud.style.display = "flex";
-      info.style.display = "block";
-    }
-  });
+  midTxt.textContent = G.midText || "—";
+}
 
-  let last = performance.now();
-  let sendAcc = 0;
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.033, (now-last)/1000);
+  last = now;
 
-  function loop(t) {
-    requestAnimationFrame(loop);
-    const dt = Math.min(0.033, Math.max(0.001, (t - last) / 1000));
-    last = t;
+  // send local input to server (only your slot matters server-side)
+  const inp = input.readLocalInput();
+  net.sendInput(inp);
 
-    // gửi input 30Hz (nhẹ)
-    sendAcc += dt;
-    if (sendAcc >= 1 / 30) {
-      sendAcc = 0;
-      const my = input.readLocalInput();
-
-      // one-shot actions
-      const i = {
-        mx: my.mx,
-        atk: input.once("atk", my.atk),
-        jump: input.once("jump", my.jump),
-        dash: input.once("dash", my.dash),
-        s1: input.once("s1", my.s1),
-        s2: input.once("s2", my.s2),
-        ult: input.once("ult", my.ult),
-        sub: input.once("sub", my.sub)
-      };
-
-      net.sendInput(i);
-      net.ping();
-    }
-
-    // update fx
-    const fx = G.fx;
-
-    for (let i = fx.slashes.length - 1; i >= 0; i--) {
-      fx.slashes[i].t += dt;
-      if (fx.slashes[i].t >= fx.slashes[i].life) fx.slashes.splice(i, 1);
-    }
-    for (let i = fx.sparks.length - 1; i >= 0; i--) {
-      const p = fx.sparks[i];
-      p.t += dt;
-      p.wx += p.vx * dt;
-      p.wy += p.vy * dt;
-      p.vy += 920 * dt;
-      p.vx *= 0.985;
-      if (p.t >= p.life) fx.sparks.splice(i, 1);
-    }
-    for (let i = fx.popups.length - 1; i >= 0; i--) {
-      const d = fx.popups[i];
-      d.t += dt;
-      d.wy += d.vy * dt;
-      d.vy += 520 * dt;
-      if (d.t >= d.life) fx.popups.splice(i, 1);
-    }
-
-    // shake/flash decay
-    if (G.shakeT > 0) { G.shakeT = Math.max(0, G.shakeT - dt); G.shake *= 0.88; }
-    else G.shake *= 0.90;
-
-    if (G.flashT > 0) { G.flashT = Math.max(0, G.flashT - dt); G.flash *= 0.80; }
-    else G.flash *= 0.85;
-
-    render.drawFrame(G, dt);
-  }
+  render.drawFrame(G, dt);
+  hud();
 
   requestAnimationFrame(loop);
-})();
+}
+requestAnimationFrame(loop);
