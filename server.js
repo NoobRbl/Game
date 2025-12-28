@@ -1,4 +1,3 @@
-// server.js (FULL)
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -13,10 +12,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 
-// ✅ serve public
+// serve public
 app.use(express.static(path.join(__dirname, "public")));
 
-// ✅ FIX Cannot GET /
+// FIX Cannot GET /
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -31,11 +30,33 @@ function makeCode(len = 5) {
   return s;
 }
 
+// ✅ default input để tránh undefined
+function emptyInput() {
+  return { mx: 0, atk: false, jump: false, dash: false, s1: false, s2: false, ult: false, sub: false };
+}
+
+// ✅ sanitize + clone input để không “dính object”
+function safeInput(payload) {
+  return {
+    mx: Math.max(-1, Math.min(1, Number(payload?.mx ?? 0))),
+    atk: !!payload?.atk,
+    jump: !!payload?.jump,
+    dash: !!payload?.dash,
+    s1: !!payload?.s1,
+    s2: !!payload?.s2,
+    ult: !!payload?.ult,
+    sub: !!payload?.sub,
+  };
+}
+
 function createRoom() {
   let code = makeCode(5);
   while (rooms.has(code)) code = makeCode(5);
 
   const G = createGameState();
+  // ✅ khởi tạo input tách riêng ngay từ đầu
+  G.inputs = { host: emptyInput(), guest: emptyInput() };
+
   rooms.set(code, {
     hostSid: null,
     guestSid: null,
@@ -46,7 +67,7 @@ function createRoom() {
   return code;
 }
 
-function startRoomLoop(code) {
+function startRoomLoop(code, io) {
   const room = rooms.get(code);
   if (!room || room.interval) return;
 
@@ -55,10 +76,16 @@ function startRoomLoop(code) {
     const dt = Math.min(0.05, Math.max(0.001, (now - room.last) / 1000));
     room.last = now;
 
-    stepGame(room.G, dt);
+    // ✅ lấy input riêng cho từng người
+    room.G.inputs ||= { host: emptyInput(), guest: emptyInput() };
+    const inpL = room.G.inputs.host || emptyInput();
+    const inpR = room.G.inputs.guest || emptyInput();
+
+    // ✅ FIX quan trọng: gọi đúng signature
+    stepGame(room.G, dt, inpL, inpR);
 
     io.to(code).emit("state", room.G);
-  }, 1000 / 30); // 30fps server tick (nhẹ, ít lag)
+  }, 1000 / 30);
 }
 
 function stopRoomLoop(code) {
@@ -68,7 +95,7 @@ function stopRoomLoop(code) {
   room.interval = null;
 }
 
-// ✅ API create room
+// API create room
 app.post("/api/room", (req, res) => {
   const code = createRoom();
   res.json({ ok: true, code });
@@ -77,11 +104,14 @@ app.post("/api/room", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" },
-  transports: ["websocket", "polling"], // cho 4g/5g ổn định hơn
+  transports: ["websocket", "polling"],
 });
 
 // ========= SOCKET =========
 io.on("connection", (socket) => {
+  // ✅ ping support
+  socket.on("pingx", (data) => socket.emit("pongx", data));
+
   socket.on("joinRoom", ({ code }) => {
     const room = rooms.get(code);
     if (!room) {
@@ -89,7 +119,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // assign role
     let role = "spectator";
     if (!room.hostSid) {
       room.hostSid = socket.id;
@@ -106,13 +135,20 @@ io.on("connection", (socket) => {
     socket.data.code = code;
     socket.data.role = role;
 
+    // đảm bảo inputs có sẵn
+    room.G.inputs ||= { host: emptyInput(), guest: emptyInput() };
+
     socket.emit("joined", { ok: true, role, code, G: room.G });
 
     // start loop when at least 1 player
-    startRoomLoop(code);
+    startRoomLoop(code, io);
 
     // countdown start when both players present
     if (room.hostSid && room.guestSid) {
+      // ✅ đồng bộ phase countdown trong state luôn (để client nào cũng giống nhau)
+      room.G.phase = "countdown";
+      room.G.phaseT = 0;
+      room.G.midText = "3";
       io.to(code).emit("countdown", { t: 3 });
     }
   });
@@ -126,30 +162,40 @@ io.on("connection", (socket) => {
     const room = rooms.get(code);
     if (!room) return;
 
-    // store input vào state
-    // G.inputs = { host: {...}, guest: {...} }
-    room.G.inputs ||= { host: null, guest: null };
-    if (role === "host") room.G.inputs.host = payload;
-    if (role === "guest") room.G.inputs.guest = payload;
+    room.G.inputs ||= { host: emptyInput(), guest: emptyInput() };
+
+    const inp = safeInput(payload);
+
+    if (role === "host") room.G.inputs.host = inp;
+    if (role === "guest") room.G.inputs.guest = inp;
   });
 
   socket.on("disconnect", () => {
     const code = socket.data.code;
     const role = socket.data.role;
     if (!code) return;
+
     const room = rooms.get(code);
     if (!room) return;
+
+    // ✅ reset input để không kẹt nút
+    room.G.inputs ||= { host: emptyInput(), guest: emptyInput() };
+    if (role === "host") room.G.inputs.host = emptyInput();
+    if (role === "guest") room.G.inputs.guest = emptyInput();
 
     if (role === "host") room.hostSid = null;
     if (role === "guest") room.guestSid = null;
 
-    // nếu không còn ai -> dừng loop + xoá phòng
-    const still = (room.hostSid || room.guestSid);
+    const still = room.hostSid || room.guestSid;
     if (!still) {
       stopRoomLoop(code);
       rooms.delete(code);
     } else {
       io.to(code).emit("info", { msg: "Opponent disconnected" });
+      // đưa về lobby nếu thiếu người
+      room.G.phase = "lobby";
+      room.G.phaseT = 0;
+      room.G.midText = "Waiting player…";
     }
   });
 });
