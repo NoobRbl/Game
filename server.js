@@ -1,8 +1,8 @@
-// server.js
+// server.js (FULL)
+import express from "express";
 import http from "http";
-import fs from "fs";
+import { Server } from "socket.io";
 import path from "path";
-import { WebSocketServer } from "ws";
 import { fileURLToPath } from "url";
 
 import { createGameState, stepGame } from "./src/game_server.js";
@@ -10,142 +10,149 @@ import { createGameState, stepGame } from "./src/game_server.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 10000;
+const app = express();
+app.use(express.json());
 
-const server = http.createServer((req,res)=>{
-  // static serve /public
-  let url = req.url.split("?")[0];
-  if(url==="/") url="/index.html";
-  const filePath = path.join(__dirname, "public", url);
+// ✅ serve public
+app.use(express.static(path.join(__dirname, "public")));
 
-  if(!filePath.startsWith(path.join(__dirname,"public"))){
-    res.writeHead(403); res.end("Forbidden"); return;
-  }
-  fs.readFile(filePath,(err,data)=>{
-    if(err){ res.writeHead(404); res.end("Not found"); return; }
-    const ext = path.extname(filePath).toLowerCase();
-    const map = {
-      ".html":"text/html",
-      ".js":"text/javascript",
-      ".css":"text/css",
-      ".png":"image/png",
-      ".jpg":"image/jpeg",
-      ".jpeg":"image/jpeg",
-      ".webp":"image/webp"
-    };
-    res.writeHead(200, {"Content-Type": map[ext]||"application/octet-stream"});
-    res.end(data);
+// ✅ FIX Cannot GET /
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ========= ROOM STORE =========
+const rooms = new Map(); // code -> { hostSid, guestSid, G, last, interval }
+
+function makeCode(len = 5) {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < len; i++) s += chars[(Math.random() * chars.length) | 0];
+  return s;
+}
+
+function createRoom() {
+  let code = makeCode(5);
+  while (rooms.has(code)) code = makeCode(5);
+
+  const G = createGameState();
+  rooms.set(code, {
+    hostSid: null,
+    guestSid: null,
+    G,
+    last: Date.now(),
+    interval: null,
+  });
+  return code;
+}
+
+function startRoomLoop(code) {
+  const room = rooms.get(code);
+  if (!room || room.interval) return;
+
+  room.interval = setInterval(() => {
+    const now = Date.now();
+    const dt = Math.min(0.05, Math.max(0.001, (now - room.last) / 1000));
+    room.last = now;
+
+    stepGame(room.G, dt);
+
+    io.to(code).emit("state", room.G);
+  }, 1000 / 30); // 30fps server tick (nhẹ, ít lag)
+}
+
+function stopRoomLoop(code) {
+  const room = rooms.get(code);
+  if (!room) return;
+  if (room.interval) clearInterval(room.interval);
+  room.interval = null;
+}
+
+// ✅ API create room
+app.post("/api/room", (req, res) => {
+  const code = createRoom();
+  res.json({ ok: true, code });
+});
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" },
+  transports: ["websocket", "polling"], // cho 4g/5g ổn định hơn
+});
+
+// ========= SOCKET =========
+io.on("connection", (socket) => {
+  socket.on("joinRoom", ({ code }) => {
+    const room = rooms.get(code);
+    if (!room) {
+      socket.emit("joinFail", { reason: "Room not found" });
+      return;
+    }
+
+    // assign role
+    let role = "spectator";
+    if (!room.hostSid) {
+      room.hostSid = socket.id;
+      role = "host";
+    } else if (!room.guestSid) {
+      room.guestSid = socket.id;
+      role = "guest";
+    } else {
+      socket.emit("joinFail", { reason: "Room full" });
+      return;
+    }
+
+    socket.join(code);
+    socket.data.code = code;
+    socket.data.role = role;
+
+    socket.emit("joined", { ok: true, role, code, G: room.G });
+
+    // start loop when at least 1 player
+    startRoomLoop(code);
+
+    // countdown start when both players present
+    if (room.hostSid && room.guestSid) {
+      io.to(code).emit("countdown", { t: 3 });
+    }
+  });
+
+  // inputs from clients
+  socket.on("input", (payload) => {
+    const code = socket.data.code;
+    const role = socket.data.role;
+    if (!code || !role) return;
+
+    const room = rooms.get(code);
+    if (!room) return;
+
+    // store input vào state
+    // G.inputs = { host: {...}, guest: {...} }
+    room.G.inputs ||= { host: null, guest: null };
+    if (role === "host") room.G.inputs.host = payload;
+    if (role === "guest") room.G.inputs.guest = payload;
+  });
+
+  socket.on("disconnect", () => {
+    const code = socket.data.code;
+    const role = socket.data.role;
+    if (!code) return;
+    const room = rooms.get(code);
+    if (!room) return;
+
+    if (role === "host") room.hostSid = null;
+    if (role === "guest") room.guestSid = null;
+
+    // nếu không còn ai -> dừng loop + xoá phòng
+    const still = (room.hostSid || room.guestSid);
+    if (!still) {
+      stopRoomLoop(code);
+      rooms.delete(code);
+    } else {
+      io.to(code).emit("info", { msg: "Opponent disconnected" });
+    }
   });
 });
 
-const wss = new WebSocketServer({ noServer:true });
-
-server.on("upgrade",(req,socket,head)=>{
-  if(req.url.startsWith("/ws")){
-    wss.handleUpgrade(req,socket,head,(ws)=>wss.emit("connection",ws,req));
-  } else socket.destroy();
-});
-
-const rooms = new Map(); // room -> { clients:Set, slotMap:Map(ws,slot), inputs:[inp0,inp1], G, lastTick, ping }
-
-function makeEmptyInput(){
-  return {mx:0, atk:false,jump:false,dash:false,s1:false,s2:false,ult:false,sub:false};
-}
-
-function getRoom(code){
-  if(!rooms.has(code)){
-    const G = createGameState();
-    rooms.set(code,{
-      clients:new Set(),
-      slotMap:new Map(),
-      inputs:[makeEmptyInput(), makeEmptyInput()],
-      G,
-      lastTick:Date.now(),
-      started:false,
-      lastBroadcast:0
-    });
-  }
-  return rooms.get(code);
-}
-
-function broadcast(room, obj){
-  const msg = JSON.stringify(obj);
-  for(const c of room.clients){
-    if(c.readyState===1) c.send(msg);
-  }
-}
-
-wss.on("connection",(ws)=>{
-  let room=null;
-  let slot=-1;
-
-  ws.on("message",(buf)=>{
-    let msg;
-    try{ msg = JSON.parse(buf.toString()); }catch{ return; }
-
-    if(msg.t==="join"){
-      const code = String(msg.room||"").toUpperCase().slice(0,10);
-      room = getRoom(code);
-      room.clients.add(ws);
-
-      // assign slot 0 then 1
-      const used = new Set(room.slotMap.values());
-      slot = used.has(0) ? (used.has(1)? -1 : 1) : 0;
-      if(slot===-1){
-        ws.send(JSON.stringify({t:"status", text:"Room full"}));
-        ws.close();
-        return;
-      }
-      room.slotMap.set(ws,slot);
-
-      ws.send(JSON.stringify({t:"welcome", room:code, slot}));
-      broadcast(room, {t:"status", text:`Player ${slot+1} joined (${room.clients.size}/2)`});
-
-      // when 2 players -> start countdown
-      if(room.clients.size===2 && room.G.phase==="lobby"){
-        room.G.phase="countdown";
-        room.G.phaseT=0;
-        room.G.midText="1";
-      }
-    }
-
-    if(msg.t==="inp" && room && slot!==-1){
-      room.inputs[slot] = msg.inp || makeEmptyInput();
-    }
-  });
-
-  ws.on("close",()=>{
-    if(!room) return;
-    room.clients.delete(ws);
-    room.slotMap.delete(ws);
-    broadcast(room,{t:"status", text:"A player left"});
-    // reset room to lobby
-    room.G.phase="lobby";
-    room.G.phaseT=0;
-    room.G.midText="Waiting player…";
-    room.inputs=[makeEmptyInput(),makeEmptyInput()];
-  });
-});
-
-// tick loop 60fps server authoritative
-setInterval(()=>{
-  const now = Date.now();
-  for(const [code, room] of rooms.entries()){
-    const dt = Math.min(0.033, (now - room.lastTick)/1000);
-    room.lastTick = now;
-
-    // update ping approx (not strict)
-    room.G.pingMs = room.G.pingMs || 0;
-
-    stepGame(room.G, dt, room.inputs[0], room.inputs[1]);
-
-    // broadcast 30fps to reduce lag
-    room.lastBroadcast += dt;
-    if(room.lastBroadcast >= (1/30)){
-      room.lastBroadcast = 0;
-      broadcast(room, {t:"state", state: room.G});
-    }
-  }
-}, 1000/60);
-
-server.listen(PORT, ()=>console.log("Server running on", PORT));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log("Server listening on", PORT));
